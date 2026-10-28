@@ -32,9 +32,12 @@ export function getRenderer() {
  * 渲染对比结果
  * @param {Object} options - 渲染选项
  * @param {HTMLElement} options.container - 渲染目标容器（可选）
- * @param {string} options.oldContent - 旧内容
- * @param {string} options.newContent - 新内容
+ * @param {string} options.oldContent - 旧内容（单字段模式）
+ * @param {string} options.newContent - 新内容（单字段模式）
  * @param {string} options.fieldName - 字段名称（默认 'content'）
+ * @param {Object} options.oldData - 旧数据对象（多字段模式）
+ * @param {Object} options.newData - 新数据对象（多字段模式）
+ * @param {Array} options.fields - 字段配置 [{ label, field, sort }]
  * @param {Object} options.diffResult - 已有的对比结果（可选，优先使用）
  * @param {Object} options.rendererConfig - 渲染器配置（可选）
  * @returns {Object} { html, markers, container } - 若传入容器则已渲染，否则返回原始数据
@@ -45,6 +48,9 @@ export function render(options = {}) {
     oldContent,
     newContent,
     fieldName = 'content',
+    oldData,
+    newData,
+    fields,
     diffResult,
     rendererConfig
   } = options
@@ -60,6 +66,9 @@ export function render(options = {}) {
     oldContent,
     newContent,
     fieldName,
+    oldData,
+    newData,
+    fields,
     diffResult,
     config: rendererConfig
   })

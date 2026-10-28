@@ -69,10 +69,29 @@ newList.forEach(item => {
 ```javascript
 import { render } from 'rich-diff'
 
-// 传入容器自动渲染
-const container = document.getElementById('diffContainer')
+// 方式一：多字段对比（推荐）
 const result = render({
-  container,
+  container: document.getElementById('diffContainer'),
+  oldData: {
+    title: '旧标题',
+    subtitle: '旧副标题',
+    content: '<p>旧内容</p>'
+  },
+  newData: {
+    title: '新标题',
+    subtitle: '新副标题',
+    content: '<p>新内容</p>'
+  },
+  fields: [
+    { label: '标题', field: 'title', sort: 1 },
+    { label: '副标题', field: 'subtitle', sort: 2 },
+    { label: '内容', field: 'content', sort: 3 }
+  ]
+})
+
+// 方式二：单字段对比（兼容旧 API）
+const result = render({
+  container: document.getElementById('diffContainer'),
   oldContent: '<p>旧内容</p>',
   newContent: '<p>新内容</p>',
   fieldName: 'content'
