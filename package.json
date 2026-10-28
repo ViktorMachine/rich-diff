@@ -1,0 +1,50 @@
+{
+  "name": "rich-diff",
+  "version": "1.0.0",
+  "description": "可扩展的富文本对比框架，支持多引擎、多类型内容对比",
+  "main": "dist/rich-diff.js",
+  "module": "dist/rich-diff.esm.js",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "echo \"请在浏览器中打开 test/index.html 进行测试\"",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "diff",
+    "html-diff",
+    "rich-text",
+    "compare",
+    "version-diff",
+    "htmldiff",
+    "diffdom"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "files": [
+    "dist/",
+    "src/"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/rich-diff.esm.js",
+      "require": "./dist/rich-diff.umd.js",
+      "default": "./src/index.js"
+    },
+    "./src": "./src/index.js"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-terser": "^0.4.4",
+    "diff-dom": "^5.0.0",
+    "htmldiff-js": "^1.0.5",
+    "rollup": "^4.9.6"
+  }
+}

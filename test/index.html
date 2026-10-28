@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>rich-diff 功能测试</title>
+  <style>
+    body { font-family: 'Microsoft YaHei', Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { color: #333; border-bottom: 2px solid #1878E8; padding-bottom: 10px; }
+    h2 { color: #555; margin-top: 30px; }
+    .test-case { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    .test-case h3 { margin: 0 0 10px 0; color: #1878E8; }
+    .result { background: #fff; padding: 10px; border: 1px solid #ddd; margin-top: 10px; }
+    .pass { border-left: 4px solid #4CAF50; }
+    .fail { border-left: 4px solid #f44336; }
+    .output { font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+    ins { color: #1878E8; background: #E8F4FF; }
+    del { color: #D32F2F; background: #FFEBEE; text-decoration: line-through; }
+    .summary { font-size: 18px; font-weight: bold; padding: 20px; background: #e3f2fd; border-radius: 5px; }
+    .summary .pass-count { color: #4CAF50; }
+    .summary .fail-count { color: #f44336; }
+  </style>
+
+  <!-- 通过 CDN 加载依赖 -->
+  <script src="https://unpkg.com/htmldiff-js@1.0.5/dist/htmldiff.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "diff-dom": "https://esm.sh/diff-dom@5.2.1"
+    }
+  }
+  </script>
+</head>
+<body>
+  <h1>rich-diff 功能测试</h1>
+
+  <div class="summary" id="summary">
+    测试中...
+  </div>
+
+  <h2>1. 模块导入测试</h2>
+  <div id="moduleTests"></div>
+
+  <h2>2. 纯文本对比测试 (diffText)</h2>
+  <div id="textDiffTests"></div>
+
+  <h2>3. HTML 对比测试 (diffHTML)</h2>
+  <div id="htmlDiffTests"></div>
+
+  <h2>4. 引擎切换测试</h2>
+  <div id="engineTests"></div>
+
+  <h2>5. 标记提取测试 (generateMarkers)</h2>
+  <div id="markerTests"></div>
+
+  <h2>6. 媒体对比测试 (diffMediaList)</h2>
+  <div id="mediaTests"></div>
+
+  <h2>7. 输出格式验证</h2>
+  <div id="formatTests"></div>
+
+  <script type="module">
+    // 将 htmldiff-js 挂载到 window 以便模块可以访问
+    window.HtmlDiff = window.HtmlDiff || HtmlDiff;
+
+    // 导入 rich-diff 模块
+    import * as RichDiff from '/src/index.js'
+
+    // 测试结果收集
+    const testResults = { pass: 0, fail: 0, tests: [] }
+
+    function log(testName, passed, message = '') {
+      testResults.tests.push({ name: testName, passed, message })
+      if (passed) {
+        testResults.pass++
+      } else {
+        testResults.fail++
+      }
+      console.log(`[${passed ? 'PASS' : 'FAIL'}] ${testName}: ${message}`)
+    }
+
+    function renderTest(containerId, title, passed, details) {
+      const container = document.getElementById(containerId)
+      const div = document.createElement('div')
+      div.className = `test-case ${passed ? 'pass' : 'fail'}`
+      div.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">${details}</div>
+      `
+      container.appendChild(div)
+    }
+
+    // ===== 1. 模块导入测试 =====
+    function testModuleImports() {
+      const tests = []
+
+      // 测试核心导出
+      tests.push({
+        name: '导入 setEngine',
+        passed: typeof RichDiff.setEngine === 'function',
+        msg: typeof RichDiff.setEngine === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 getEngineName',
+        passed: typeof RichDiff.getEngineName === 'function',
+        msg: typeof RichDiff.getEngineName === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 getAvailableEngines',
+        passed: typeof RichDiff.getAvailableEngines === 'function',
+        msg: typeof RichDiff.getAvailableEngines === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 diffHTML',
+        passed: typeof RichDiff.diffHTML === 'function',
+        msg: typeof RichDiff.diffHTML === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 diffText',
+        passed: typeof RichDiff.diffText === 'function',
+        msg: typeof RichDiff.diffText === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 generateMarkers',
+        passed: typeof RichDiff.generateMarkers === 'function',
+        msg: typeof RichDiff.generateMarkers === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 diffMediaList',
+        passed: typeof RichDiff.diffMediaList === 'function',
+        msg: typeof RichDiff.diffMediaList === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 diffCustomFields',
+        passed: typeof RichDiff.diffCustomFields === 'function',
+        msg: typeof RichDiff.diffCustomFields === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 computeArticleDiff',
+        passed: typeof RichDiff.computeArticleDiff === 'function',
+        msg: typeof RichDiff.computeArticleDiff === 'function' ? 'OK' : 'FAILED'
+      })
+      tests.push({
+        name: '导入 hasDiffMarkers',
+        passed: typeof RichDiff.hasDiffMarkers === 'function',
+        msg: typeof RichDiff.hasDiffMarkers === 'function' ? 'OK' : 'FAILED'
+      })
+
+      // 验证导出
+      tests.forEach(t => {
+        log(`模块导入 - ${t.name}`, t.passed, t.msg)
+        renderTest('moduleTests', t.name, t.passed, t.msg)
+      })
+
+      // 常量导出
+      const hasConstants = RichDiff.ErrorTypes && RichDiff.DefaultConfig && RichDiff.MediaTypes && RichDiff.ChangeTypes
+      log('模块导入 - 常量导出', hasConstants, hasConstants ? 'OK' : 'FAILED')
+      renderTest('moduleTests', '常量导出', hasConstants, hasConstants ? 'ErrorTypes, DefaultConfig, MediaTypes, ChangeTypes' : '缺少常量')
+    }
+
+    // ===== 2. 纯文本对比测试 =====
+    function testDiffText() {
+      // 测试基本文本对比
+      const result1 = RichDiff.diffText('旧标题', '新标题', 'title')
+
+      const hasHtml = typeof result1.html === 'string' && result1.html.length > 0
+      const hasMarkers = Array.isArray(result1.markers) && result1.markers.length > 0
+      const hasUseShadowDOM = typeof result1.useShadowDOM === 'boolean'
+
+      log('diffText - 基本文本对比', hasHtml, `html: ${result1.html.substring(0, 50)}`)
+      renderTest('textDiffTests', '基本文本对比', hasHtml, `<div class="output">${result1.html}</div>`)
+
+      log('diffText - 返回 markers', hasMarkers, hasMarkers ? `markers: ${result1.markers.join(', ')}` : 'markers 为空')
+      renderTest('textDiffTests', '返回 markers', hasMarkers, hasMarkers ? `markers: ${JSON.stringify(result1.markers)}` : '无 markers')
+
+      log('diffText - 返回 useShadowDOM', hasUseShadowDOM, `useShadowDOM: ${result1.useShadowDOM}`)
+      renderTest('textDiffTests', '返回 useShadowDOM', hasUseShadowDOM, `useShadowDOM: ${result1.useShadowDOM}`)
+
+      // 测试相同文本（无差异）
+      const result2 = RichDiff.diffText('相同文本', '相同文本', 'title')
+      const noDiff = result2.html === '相同文本' && result2.markers.length === 0
+      log('diffText - 相同文本无差异', noDiff, noDiff ? 'OK' : 'FAILED')
+      renderTest('textDiffTests', '相同文本无差异', noDiff, `html: ${result2.html}, markers: ${result2.markers.length}`)
+
+      // 测试空值
+      const result3 = RichDiff.diffText('', '新文本', 'title')
+      const emptyOld = result3.html.includes('<ins') || result3.html.includes('新文本')
+      log('diffText - 空旧值', emptyOld, `html: ${result3.html}`)
+      renderTest('textDiffTests', '空旧值处理', emptyOld, `<div class="output">${result3.html}</div>`)
+
+      // 测试 data-diff 属性
+      const hasDataDiffAttr = result1.html.includes('data-diff=') && result1.html.includes('data-diff-id=')
+      log('diffText - data-diff 属性', hasDataDiffAttr, hasDataDiffAttr ? 'OK' : '缺少属性')
+      renderTest('textDiffTests', 'data-diff 属性', hasDataDiffAttr, hasDataDiffAttr ? '包含 data-diff 和 data-diff-id' : '缺少属性')
+    }
+
+    // ===== 3. HTML 对比测试 =====
+    function testDiffHTML() {
+      const result1 = RichDiff.diffHTML('<p>旧内容</p>', '<p>新内容</p>', 'content')
+
+      const hasHtml = typeof result1.html === 'string' && result1.html.length > 0
+      const hasMarkers = Array.isArray(result1.markers)
+
+      log('diffHTML - 基本 HTML 对比', hasHtml, `html: ${result1.html.substring(0, 80)}`)
+      renderTest('htmlDiffTests', '基本 HTML 对比', hasHtml, `<div class="output">${result1.html}</div>`)
+
+      log('diffHTML - 返回 markers', hasMarkers, `markers count: ${result1.markers.length}`)
+      renderTest('htmlDiffTests', '返回 markers', hasMarkers, `markers: ${JSON.stringify(result1.markers)}`)
+
+      // 测试相同 HTML（无差异）
+      const result2 = RichDiff.diffHTML('<p>相同内容</p>', '<p>相同内容</p>', 'content')
+      const noDiff = result2.html === '<p>相同内容</p>'
+      log('diffHTML - 相同 HTML 无差异', noDiff, noDiff ? 'OK' : 'FAILED')
+      renderTest('htmlDiffTests', '相同 HTML 无差异', noDiff, `html: ${result2.html}`)
+
+      // 测试复杂 HTML
+      const result3 = RichDiff.diffHTML(
+        '<div><h1>旧标题</h1><p>旧段落</p></div>',
+        '<div><h1>新标题</h1><p>新段落</p></div>',
+        'content'
+      )
+      const complexHtml = result3.html.length > 0
+      log('diffHTML - 复杂 HTML 对比', complexHtml, `html length: ${result3.html.length}`)
+      renderTest('htmlDiffTests', '复杂 HTML 对比', complexHtml, `<div class="output">${result3.html}</div>`)
+
+      // 测试 data-diff 属性
+      const hasDataDiffAttr = result1.html.includes('data-diff=') && result1.html.includes('data-diff-id=')
+      log('diffHTML - data-diff 属性', hasDataDiffAttr, hasDataDiffAttr ? 'OK' : '缺少属性')
+      renderTest('htmlDiffTests', 'data-diff 属性', hasDataDiffAttr, hasDataDiffAttr ? '包含 data-diff 和 data-diff-id' : '缺少属性')
+    }
+
+    // ===== 4. 引擎切换测试 =====
+    function testEngineSwitch() {
+      // 获取可用引擎
+      const engines = RichDiff.getAvailableEngines()
+      const hasEngines = Array.isArray(engines) && engines.length >= 2
+
+      log('getAvailableEngines - 返回引擎列表', hasEngines, `engines: ${engines.join(', ')}`)
+      renderTest('engineTests', '返回引擎列表', hasEngines, `可用引擎: ${engines.join(', ')}`)
+
+      // 测试默认引擎
+      const defaultEngine = RichDiff.getEngineName()
+      const isHtmldiff = defaultEngine === 'htmldiff'
+      log('getEngineName - 默认引擎', isHtmldiff, `默认引擎: ${defaultEngine}`)
+      renderTest('engineTests', '默认引擎', isHtmldiff, `当前引擎: ${defaultEngine}`)
+
+      // 测试引擎切换到 diffdom
+      const switched = RichDiff.setEngine('diffdom')
+      const afterSwitch = RichDiff.getEngineName() === 'diffdom'
+
+      log('setEngine - 切换到 diffdom', switched && afterSwitch, switched ? `切换后引擎: ${RichDiff.getEngineName()}` : '切换失败')
+      renderTest('engineTests', '切换引擎', switched && afterSwitch, `当前引擎: ${RichDiff.getEngineName()}`)
+
+      // 验证 diffdom 引擎可以正常工作
+      const result = RichDiff.diffText('测试文字', '修改后文字', 'test')
+      const diffdomWorks = result.html.length > 0
+
+      log('diffdom 引擎正常工作', diffdomWorks, `diffText 结果: ${result.html.substring(0, 50)}`)
+      renderTest('engineTests', 'diffdom 引擎功能', diffdomWorks, `<div class="output">${result.html}</div>`)
+
+      // 恢复默认引擎
+      RichDiff.setEngine('htmldiff')
+      const restored = RichDiff.getEngineName() === 'htmldiff'
+      log('setEngine - 恢复默认引擎', restored, `恢复后引擎: ${RichDiff.getEngineName()}`)
+      renderTest('engineTests', '恢复默认引擎', restored, `当前引擎: ${RichDiff.getEngineName()}`)
+    }
+
+    // ===== 5. 标记提取测试 =====
+    function testGenerateMarkers() {
+      // 准备测试数据
+      const diffed = {
+        title: RichDiff.diffText('旧标题', '新标题', 'title').html,
+        content: RichDiff.diffHTML('<p>旧内容</p>', '<p>新内容</p>', 'content').html
+      }
+      const last = { title: '旧标题', content: '<p>旧内容</p>' }
+      const current = { title: '新标题', content: '<p>新内容</p>' }
+
+      const markers = RichDiff.generateMarkers({ diffed, last, current })
+
+      const hasMarkers = Array.isArray(markers) && markers.length > 0
+      log('generateMarkers - 生成标记', hasMarkers, `生成 ${markers.length} 个标记`)
+      renderTest('markerTests', '生成标记', hasMarkers, `生成 ${markers.length} 个标记`)
+
+      if (hasMarkers) {
+        const hasType = markers.every(m => m.type && m.field)
+        log('generateMarkers - 标记包含类型和字段', hasType, 'OK')
+        renderTest('markerTests', '标记结构', hasType, JSON.stringify(markers[0], null, 2))
+      }
+
+      // 测试 sortMarkers
+      const sorted = RichDiff.sortMarkers(markers)
+      const isSorted = Array.isArray(sorted)
+      log('sortMarkers - 排序功能', isSorted, `排序后 ${sorted.length} 个标记`)
+      renderTest('markerTests', '排序功能', isSorted, 'OK')
+
+      // 测试 hasDiffMarkers
+      const diffedHtml = '<ins data-diff="add">新增</ins><del data-diff="del">删除</del>'
+      const hasMarkersResult = RichDiff.hasDiffMarkers(diffedHtml)
+      const noMarkersResult = RichDiff.hasDiffMarkers('普通文本')
+
+      log('hasDiffMarkers - 检测差异标记', hasMarkersResult && !noMarkersResult,
+        `有标记: ${hasMarkersResult}, 无标记: ${!noMarkersResult}`)
+      renderTest('markerTests', '检测差异标记', hasMarkersResult && !noMarkersResult,
+        `有标记字符串: ${hasMarkersResult}, 普通文本: ${!noMarkersResult}`)
+    }
+
+    // ===== 6. 媒体对比测试 =====
+    function testDiffMediaList() {
+      const oldList = [
+        { fileValue: 'img1.jpg', title: '图片1', type: 'image' },
+        { fileValue: 'img2.jpg', title: '图片2', type: 'image' }
+      ]
+      const newList = [
+        { fileValue: 'img1.jpg', title: '图片1修改', type: 'image' },
+        { fileValue: 'img3.jpg', title: '图片3', type: 'image' }
+      ]
+
+      const result = RichDiff.diffMediaList(oldList, newList)
+
+      const hasResult = result && result.newList && result.oldList
+      log('diffMediaList - 基本对比', hasResult, `newList: ${result.newList.length}, oldList: ${result.oldList.length}`)
+      renderTest('mediaTests', '基本对比', hasResult, `新增/修改: ${result.newList.length}, 原始: ${result.oldList.length}`)
+
+      // 检查变更类型
+      const hasDiffType = result.newList.every(item => item.diffType)
+      log('diffMediaList - 变更类型标记', hasDiffType, '所有项都有 diffType')
+      renderTest('mediaTests', '变更类型标记', hasDiffType,
+        result.newList.map(item => `${item.fileValue}: ${item.diffType}`).join(', '))
+
+      // 检查识别出修改的项
+      const modified = result.newList.find(item => item.diffType === 'modify')
+      const added = result.newList.find(item => item.diffType === 'add')
+      const deleted = result.newList.find(item => item.diffType === 'del')
+
+      log('diffMediaList - 修改检测', !!modified, modified ? `修改: ${modified.fileValue}` : '无修改')
+      renderTest('mediaTests', '修改检测', !!modified, modified ? `修改: ${modified.fileValue}` : '无修改')
+
+      log('diffMediaList - 新增检测', !!added, added ? `新增: ${added.fileValue}` : '无新增')
+      renderTest('mediaTests', '新增检测', !!added, added ? `新增: ${added.fileValue}` : '无新增')
+
+      log('diffMediaList - 删除检测', !!deleted, deleted ? `删除: ${deleted.fileValue}` : '无删除')
+      renderTest('mediaTests', '删除检测', !!deleted, deleted ? `删除: ${deleted.fileValue}` : '无删除')
+    }
+
+    // ===== 7. 输出格式验证 =====
+    function testOutputFormat() {
+      // 测试 diffText 输出格式
+      const textResult = RichDiff.diffText('旧文本', '新文本', 'test')
+
+      const hasHtml = typeof textResult.html === 'string'
+      const hasUseShadowDOM = typeof textResult.useShadowDOM === 'boolean'
+      const hasMarkers = Array.isArray(textResult.markers)
+
+      log('输出格式 - html 字符串', hasHtml, `html: ${textResult.html.substring(0, 30)}...`)
+      renderTest('formatTests', 'html 字符串', hasHtml, textResult.html)
+
+      log('输出格式 - useShadowDOM 布尔值', hasUseShadowDOM, `useShadowDOM: ${textResult.useShadowDOM}`)
+      renderTest('formatTests', 'useShadowDOM 布尔值', hasUseShadowDOM, String(textResult.useShadowDOM))
+
+      log('输出格式 - markers 数组', hasMarkers, `markers: ${textResult.markers.length}`)
+      renderTest('formatTests', 'markers 数组', hasMarkers, JSON.stringify(textResult.markers))
+
+      // 测试 data-diff 属性格式
+      const htmlResult = RichDiff.diffHTML('<p>旧</p>', '<p>新</p>', 'content')
+      const hasDataDiff = htmlResult.html.includes('data-diff="') &&
+                         htmlResult.html.includes('data-diff-id="') &&
+                         htmlResult.html.includes('data-diff-field="')
+
+      log('输出格式 - data-diff 属性', hasDataDiff, hasDataDiff ? 'OK' : '缺少属性')
+      renderTest('formatTests', 'data-diff 属性', hasDataDiff, hasDataDiff ? '完整' : '缺失')
+
+      // 测试 detectChangeType
+      const addOnly = RichDiff.detectChangeType('<ins data-diff="add">新增</ins>')
+      const delOnly = RichDiff.detectChangeType('<del data-diff="del">删除</del>')
+      const modify = RichDiff.detectChangeType('<del>旧</del><ins>新</ins>')
+
+      const changeTypeCorrect = addOnly === 'add' && delOnly === 'del' && modify === 'modify'
+      log('detectChangeType - 变更类型检测', changeTypeCorrect,
+        `add: ${addOnly}, del: ${delOnly}, modify: ${modify}`)
+      renderTest('formatTests', '变更类型检测', changeTypeCorrect,
+        `add: ${addOnly}, del: ${delOnly}, modify: ${modify}`)
+    }
+
+    // ===== 运行所有测试 =====
+    function runAllTests() {
+      testModuleImports()
+      testDiffText()
+      testDiffHTML()
+      testEngineSwitch()
+      testGenerateMarkers()
+      testDiffMediaList()
+      testOutputFormat()
+
+      // 更新摘要
+      const summary = document.getElementById('summary')
+      summary.innerHTML = `测试完成: <span class="pass-count">通过 ${testResults.pass}</span> / <span class="fail-count">失败 ${testResults.fail}</span>`
+
+      // 输出汇总
+      console.log('='.repeat(50))
+      console.log(`测试汇总: 通过 ${testResults.pass}, 失败 ${testResults.fail}`)
+      console.log('='.repeat(50))
+    }
+
+    // 启动测试
+    runAllTests()
+  </script>
+</body>
+</html>

@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rich-Diff 功能演示</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 40px 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      margin-bottom: 30px;
+      border-radius: 12px;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+      color: #333;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 8px;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .demo-box {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .demo-box h3 {
+      font-size: 1rem;
+      margin-bottom: 12px;
+      color: #666;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5a6fd6;
+    }
+
+    .btn-secondary {
+      background: #e9ecef;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #dee2e6;
+    }
+
+    .btn-secondary.active {
+      background: #667eea;
+      color: white;
+    }
+
+    .result-box {
+      background: #fff;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 100px;
+    }
+
+    .result-box ins,
+    .result-box difftext[data-diff="add"] {
+      color: #1878E8;
+      background: #E8F4FF;
+      text-decoration: none;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    .result-box del,
+    .result-box difftext[data-diff="del"] {
+      color: #D32F2F;
+      background: #FFEBEE;
+      text-decoration: line-through;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    .markers-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .markers-list li {
+      padding: 12px;
+      background: #f8f9fa;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      border-left: 4px solid #667eea;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .marker-type {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .marker-type.add {
+      background: #E8F4FF;
+      color: #1878E8;
+    }
+
+    .marker-type.del {
+      background: #FFEBEE;
+      color: #D32F2F;
+    }
+
+    .marker-type.modify {
+      background: #FFF3E0;
+      color: #E65100;
+    }
+
+    .engine-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .engine-badge {
+      padding: 4px 12px;
+      background: #667eea;
+      color: white;
+      border-radius: 20px;
+      font-size: 12px;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 13px;
+    }
+
+    pre {
+      background: #2d3748;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+
+    .api-section {
+      margin-top: 30px;
+    }
+
+    .api-item {
+      margin-bottom: 20px;
+    }
+
+    .api-item h4 {
+      color: #667eea;
+      margin-bottom: 8px;
+    }
+
+    .api-item p {
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 768px) {
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Rich-Diff</h1>
+      <p>可扩展的富文本对比框架</p>
+    </header>
+
+    <!-- 引擎选择 -->
+    <div class="section">
+      <h2>引擎选择</h2>
+      <div class="engine-status">
+        <span>当前引擎:</span>
+        <span class="engine-badge" id="currentEngine">htmldiff</span>
+      </div>
+      <div class="btn-group">
+        <button class="btn-secondary active" data-engine="htmldiff" onclick="switchEngine('htmldiff', this)">htmldiff (默认)</button>
+        <button class="btn-secondary" data-engine="diffdom" onclick="switchEngine('diffdom', this)">diffdom</button>
+      </div>
+    </div>
+
+    <!-- 文本对比 -->
+    <div class="section">
+      <h2>纯文本对比</h2>
+      <div class="demo-grid">
+        <div class="demo-box">
+          <h3>旧文本</h3>
+          <textarea id="oldText">这是旧标题内容</textarea>
+        </div>
+        <div class="demo-box">
+          <h3>新文本</h3>
+          <textarea id="newText">这是新标题内容</textarea>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn-primary" onclick="runTextDiff()">执行对比</button>
+      </div>
+      <div class="result-box" id="textResult">
+        <p style="color: #999;">点击「执行对比」查看结果...</p>
+      </div>
+    </div>
+
+    <!-- HTML 对比 -->
+    <div class="section">
+      <h2>HTML/富文本对比</h2>
+      <div class="demo-grid">
+        <div class="demo-box">
+          <h3>旧 HTML</h3>
+          <textarea id="oldHtml"><p>这是一段<strong>旧内容</strong>，包含一些文字。</p>
+<p>第二段落内容。</p></textarea>
+        </div>
+        <div class="demo-box">
+          <h3>新 HTML</h3>
+          <textarea id="newHtml"><p>这是一段<em>新内容</em>，包含一些文字。</p>
+<p>第二段落已修改。</p>
+<p>新增的第三段落。</p></textarea>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn-primary" onclick="runHtmlDiff()">执行对比</button>
+      </div>
+      <div class="result-box" id="htmlResult">
+        <p style="color: #999;">点击「执行对比」查看结果...</p>
+      </div>
+    </div>
+
+    <!-- 媒体对比 -->
+    <div class="section">
+      <h2>媒体资源对比</h2>
+      <div class="demo-grid">
+        <div class="demo-box">
+          <h3>旧媒体列表 (JSON)</h3>
+          <textarea id="oldMedia">[
+  { "fileValue": "img1.jpg", "title": "图片1", "describes": "描述1" },
+  { "fileValue": "img2.jpg", "title": "图片2", "describes": "描述2" }
+]</textarea>
+        </div>
+        <div class="demo-box">
+          <h3>新媒体列表 (JSON)</h3>
+          <textarea id="newMedia">[
+  { "fileValue": "img1.jpg", "title": "图片1已修改", "describes": "描述1" },
+  { "fileValue": "img3.jpg", "title": "新图片", "describes": "新描述" }
+]</textarea>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn-primary" onclick="runMediaDiff()">执行对比</button>
+      </div>
+      <div class="result-box" id="mediaResult">
+        <p style="color: #999;">点击「执行对比」查看结果...</p>
+      </div>
+    </div>
+
+    <!-- 标记提取 -->
+    <div class="section">
+      <h2>变更标记提取</h2>
+      <p>从差异结果中提取结构化的标记信息：</p>
+      <div class="btn-group">
+        <button class="btn-primary" onclick="runMarkerExtraction()">提取标记</button>
+      </div>
+      <ul class="markers-list" id="markersList">
+        <li style="color: #999;">点击「提取标记」查看结果...</li>
+      </ul>
+    </div>
+
+    <!-- API 文档 -->
+    <div class="section api-section">
+      <h2>API 参考</h2>
+
+      <div class="api-item">
+        <h4><code>diffText(oldText, newText, fieldName)</code></h4>
+        <p>对比纯文本，返回 <code>{ html, useShadowDOM, markers }</code></p>
+      </div>
+
+      <div class="api-item">
+        <h4><code>diffHTML(oldHtml, newHtml, fieldName)</code></h4>
+        <p>对比 HTML/富文本，支持 ShadowDOM 降级兼容</p>
+      </div>
+
+      <div class="api-item">
+        <h4><code>diffMediaList(oldList, newList, idField)</code></h4>
+        <p>对比媒体资源列表，返回 <code>{ newList, oldList }</code></p>
+      </div>
+
+      <div class="api-item">
+        <h4><code>generateMarkers(diffResult, options)</code></h4>
+        <p>从差异结果中提取变更标记数组</p>
+      </div>
+
+      <div class="api-item">
+        <h4><code>setEngine(engine)</code></h4>
+        <p>切换对比引擎: <code>'htmldiff'</code> 或 <code>'diffdom'</code></p>
+      </div>
+    </div>
+
+    <!-- 使用示例 -->
+    <div class="section">
+      <h2>代码示例</h2>
+      <pre><code>import {
+  diffHTML,
+  diffText,
+  generateMarkers,
+  setEngine,
+  diffMediaList
+} from 'rich-diff'
+
+// 1. 切换引擎（可选）
+setEngine('diffdom')
+
+// 2. 纯文本对比
+const textResult = diffText('旧标题', '新标题', 'title')
+console.log(textResult.html) // '<del>旧</del><ins>新</ins>标题'
+
+// 3. HTML 对比
+const htmlResult = diffHTML(oldHtml, newHtml, 'content')
+
+// 4. 媒体对比
+const { newList, oldList } = diffMediaList(oldMedia, newMedia)
+// newList 中每项带有 diffType: 'add' | 'del' | 'alter' | 'same'
+
+// 5. 提取标记
+const markers = generateMarkers({
+  diffed: { content: htmlResult.html },
+  last: oldData,
+  current: newData
+})</code></pre>
+    </div>
+  </div>
+
+  <!-- 使用打包后的产物 -->
+  <script type="module">
+    import {
+      diffHTML,
+      diffText,
+      diffMediaList,
+      generateMarkers,
+      setEngine,
+      getEngineName
+    } from '../dist/rich-diff.esm.js'
+
+    // 暴露到全局
+    window.richDiff = {
+      diffHTML,
+      diffText,
+      diffMediaList,
+      generateMarkers,
+      setEngine,
+      getEngineName
+    }
+
+    // 引擎切换
+    window.switchEngine = function(engine, btn) {
+      setEngine(engine)
+      document.getElementById('currentEngine').textContent = engine
+
+      // 更新按钮状态
+      document.querySelectorAll('[data-engine]').forEach(b => {
+        b.classList.remove('active')
+      })
+      btn.classList.add('active')
+    }
+
+    // 文本对比
+    window.runTextDiff = function() {
+      const oldText = document.getElementById('oldText').value
+      const newText = document.getElementById('newText').value
+      const result = diffText(oldText, newText, 'title')
+
+      document.getElementById('textResult').innerHTML = result.html || '<p style="color:#999;">无差异</p>'
+    }
+
+    // HTML 对比
+    window.runHtmlDiff = function() {
+      const oldHtml = document.getElementById('oldHtml').value
+      const newHtml = document.getElementById('newHtml').value
+      const result = diffHTML(oldHtml, newHtml, 'content')
+
+      document.getElementById('htmlResult').innerHTML = result.html || '<p style="color:#999;">无差异</p>'
+
+      // 存储结果供标记提取使用
+      window.lastHtmlResult = result
+    }
+
+    // 媒体对比
+    window.runMediaDiff = function() {
+      try {
+        const oldMedia = JSON.parse(document.getElementById('oldMedia').value)
+        const newMedia = JSON.parse(document.getElementById('newMedia').value)
+        const { newList } = diffMediaList(oldMedia, newMedia)
+
+        let html = '<table style="width:100%; border-collapse: collapse;">'
+        html += '<tr><th>文件</th><th>标题</th><th>描述</th><th>状态</th></tr>'
+
+        newList.forEach(item => {
+          const statusClass = {
+            'add': 'marker-type add',
+            'del': 'marker-type del',
+            'alter': 'marker-type modify',
+            'same': ''
+          }[item.diffType] || ''
+
+          const statusText = {
+            'add': '新增',
+            'del': '删除',
+            'alter': '修改',
+            'same': '相同'
+          }[item.diffType] || item.diffType
+
+          html += `<tr>
+            <td>${item.fileValue}</td>
+            <td>${item.title || '-'}</td>
+            <td>${item.describes || '-'}</td>
+            <td><span class="${statusClass}">${statusText}</span></td>
+          </tr>`
+        })
+
+        html += '</table>'
+        document.getElementById('mediaResult').innerHTML = html
+      } catch (e) {
+        document.getElementById('mediaResult').innerHTML = `<p style="color:red;">JSON 解析错误: ${e.message}</p>`
+      }
+    }
+
+    // 标记提取
+    window.runMarkerExtraction = function() {
+      if (!window.lastHtmlResult) {
+        document.getElementById('markersList').innerHTML = '<li style="color:#999;">请先执行 HTML 对比</li>'
+        return
+      }
+
+      const markers = generateMarkers({
+        diffed: { content: window.lastHtmlResult.html },
+        current: { content: document.getElementById('newHtml').value },
+        last: { content: document.getElementById('oldHtml').value }
+      })
+
+      if (markers.length === 0) {
+        document.getElementById('markersList').innerHTML = '<li style="color:#999;">无变更标记</li>'
+        return
+      }
+
+      let html = ''
+      markers.forEach(marker => {
+        const typeClass = `marker-type ${marker.changeType}`
+        const typeText = { add: '新增', del: '删除', modify: '修改' }[marker.changeType] || marker.changeType
+
+        html += `<li>
+          <div>
+            <span class="${typeClass}">${typeText}</span>
+            <strong style="margin-left: 10px;">${marker.fieldLabel || marker.field}</strong>
+          </div>
+          <div style="color:#666; font-size:12px;">
+            ${marker.oldValue ? `旧: "${marker.oldValue.substring(0, 50)}..." ` : ''}
+            ${marker.newValue ? `新: "${marker.newValue.substring(0, 50)}..."` : ''}
+          </div>
+        </li>`
+      })
+
+      document.getElementById('markersList').innerHTML = html
+    }
+
+    console.log('Rich-Diff 演示页面已加载')
+    console.log('可用方法:', Object.keys(window.richDiff))
+  </script>
+</body>
+</html>
