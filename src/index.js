@@ -50,6 +50,14 @@ import {
   cleanContent
 } from './markers/index.js'
 
+// ── 渲染器 ──
+import {
+  render,
+  setRenderer,
+  getRenderer,
+  defaultRenderer
+} from './renderers/index.js'
+
 // ── LeaderLine ──
 import {
   createConnector,
@@ -103,6 +111,11 @@ export {
   extractDiffMarkers,
   findElementById,
   cleanContent,
+  // 渲染器
+  render,
+  setRenderer,
+  getRenderer,
+  defaultRenderer,
   // LeaderLine
   createConnector,
   createConnectorFromMarker,
@@ -151,6 +164,9 @@ export default {
   // 展示层
   generateMarkers,
   sortMarkers,
+  // 渲染器
+  render,
+  setRenderer,
   // LeaderLine
   createConnector,
   clearConnectors,

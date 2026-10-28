@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>LeaderLine 测试 - @lionad/leader-line</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 40px;
+      background: #f5f7fa;
+    }
+    .box {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    #start {
+      left: 50px;
+      top: 100px;
+      background: #1878E8;
+    }
+    #end {
+      left: 300px;
+      top: 250px;
+      background: #D32F2F;
+    }
+    #end2 {
+      left: 500px;
+      top: 150px;
+      background: #388E3C;
+    }
+    .log {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: #1a1a2e;
+      color: #00ff88;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Consolas', monospace;
+      font-size: 13px;
+      max-height: 150px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <h2>LeaderLine 测试</h2>
+  <p>使用 @lionad/leader-line 打包</p>
+
+  <div id="start" class="box">Start</div>
+  <div id="end" class="box">End</div>
+  <div id="end2" class="box">End 2</div>
+
+  <div class="log" id="log"></div>
+
+  <script type="module">
+    import { createConnector, clearConnectors, isLeaderLineAvailable } from '../dist/rich-diff.dev.js'
+
+    function log(msg) {
+      const el = document.getElementById('log')
+      el.innerHTML += msg + '<br>'
+      console.log(msg)
+    }
+
+    log('isLeaderLineAvailable(): ' + isLeaderLineAvailable())
+    log('window.LeaderLine: ' + (window.LeaderLine ? '✓ 已挂载' : '✗ 未挂载'))
+
+    // 创建连线
+    try {
+      const r1 = createConnector(
+        document.getElementById('start'),
+        document.getElementById('end'),
+        { color: '#E65100', size: 3 }
+      )
+      log('连线 1 创建: ' + (r1 ? '✓ 成功' : '✗ 失败'))
+
+      const r2 = createConnector(
+        document.getElementById('start'),
+        document.getElementById('end2'),
+        { color: '#4CAF50', size: 2, dash: true }
+      )
+      log('连线 2 创建: ' + (r2 ? '✓ 成功' : '✗ 失败'))
+
+      log('当前连线数量: ' + r1?.line?.constructor?.name || 'unknown')
+    } catch (e) {
+      log('错误: ' + e.message)
+      console.error(e)
+    }
+  </script>
+</body>
+</html>

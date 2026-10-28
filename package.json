@@ -2,7 +2,7 @@
   "name": "rich-diff",
   "version": "1.0.0",
   "description": "可扩展的富文本对比框架，支持多引擎、多类型内容对比",
-  "main": "dist/rich-diff.js",
+  "main": "dist/rich-diff.umd.js",
   "module": "dist/rich-diff.esm.js",
   "type": "module",
   "scripts": {
@@ -22,7 +22,11 @@
   ],
   "author": "",
   "license": "MIT",
-  "dependencies": {},
+  "dependencies": {
+    "@lionad/leader-line": "^1.0.0-alpha.0",
+    "diff-dom": "^5.0.0",
+    "htmldiff-js": "^1.0.5"
+  },
   "repository": {
     "type": "git",
     "url": ""
@@ -35,16 +39,13 @@
     ".": {
       "import": "./dist/rich-diff.esm.js",
       "require": "./dist/rich-diff.umd.js",
-      "default": "./src/index.js"
-    },
-    "./src": "./src/index.js"
+      "default": "./dist/rich-diff.esm.js"
+    }
   },
   "devDependencies": {
-    "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.4",
-    "diff-dom": "^5.0.0",
-    "htmldiff-js": "^1.0.5",
     "rollup": "^4.9.6"
   }
 }

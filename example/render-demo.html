@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rich-Diff 渲染器演示</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 1.6rem;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 0.9rem;
+    }
+
+    .toolbar {
+      background: white;
+      padding: 16px 24px;
+      border-bottom: 1px solid #e9ecef;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .toolbar textarea {
+      flex: 1;
+      min-width: 200px;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      min-height: 60px;
+      max-height: 100px;
+    }
+
+    .toolbar button {
+      padding: 10px 24px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toolbar button:hover {
+      background: #5a6fd6;
+    }
+
+    .main-container {
+      padding: 20px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+
+    /* 渲染容器 */
+    #diffContainer {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      height: calc(100vh - 280px);
+      min-height: 400px;
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .toolbar {
+        flex-direction: column;
+      }
+      .toolbar textarea {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Rich-Diff 渲染器</h1>
+    <p>传入容器自动渲染，不传容器则返回原始数据</p>
+  </div>
+
+  <div class="toolbar">
+    <textarea id="oldContent" placeholder="旧内容"><p>这是一段<strong>旧内容</strong>，包含一些文字。</p>
+<p>第二段落内容，有一些描述。</p>
+<p>第三段落保持不变。</p></textarea>
+    <textarea id="newContent" placeholder="新内容"><p>这是一段<em>新内容</em>，包含一些文字。</p>
+<p>第二段落已修改，有新的描述。</p>
+<p>第三段落保持不变。</p>
+<p>新增的第四段落。</p></textarea>
+    <button onclick="runRender()">渲染对比</button>
+    <button onclick="runRenderRaw()">获取原始数据</button>
+  </div>
+
+  <div class="main-container">
+    <div class="section-title">渲染结果</div>
+    <div id="diffContainer"></div>
+  </div>
+
+  <script type="module">
+    import { render, isLeaderLineAvailable } from '../dist/rich-diff.dev.js'
+
+    // 检查 LeaderLine 是否可用
+    console.log('LeaderLine 可用:', isLeaderLineAvailable())
+
+    // 使用渲染器渲染
+    window.runRender = function() {
+      const oldContent = document.getElementById('oldContent').value
+      const newContent = document.getElementById('newContent').value
+      const container = document.getElementById('diffContainer')
+
+      // 传入容器，自动渲染
+      const result = render({
+        container,
+        oldContent,
+        newContent,
+        fieldName: 'content'
+      })
+
+      console.log('渲染结果:', result)
+    }
+
+    // 获取原始数据（不渲染）
+    window.runRenderRaw = function() {
+      const oldContent = document.getElementById('oldContent').value
+      const newContent = document.getElementById('newContent').value
+
+      // 不传容器，返回原始数据
+      const result = render({
+        oldContent,
+        newContent,
+        fieldName: 'content'
+      })
+
+      console.log('原始数据:', result)
+
+      // 手动渲染示例
+      const container = document.getElementById('diffContainer')
+      container.innerHTML = `
+        <div style="padding: 20px;">
+          <h3>原始数据（控制台查看）</h3>
+          <pre style="background: #f5f5f5; padding: 16px; border-radius: 6px; overflow: auto; max-height: 400px;">
+${JSON.stringify(result, null, 2)}
+          </pre>
+        </div>
+      `
+    }
+
+    console.log('渲染器演示页面已加载')
+  </script>
+</body>
+</html>
