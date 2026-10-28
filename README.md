@@ -70,6 +70,7 @@ newList.forEach(item => {
 import { render } from 'rich-diff'
 
 // 方式一：多字段对比（推荐）
+// 传入数据对象和字段配置，自动渲染表单布局
 const result = render({
   container: document.getElementById('diffContainer'),
   oldData: {
@@ -89,6 +90,12 @@ const result = render({
   ]
 })
 
+// 返回值包含：
+// - container: 渲染容器
+// - fieldResults: 各字段的对比结果
+// - markers: 所有变更标记
+// - destroy: 销毁方法
+
 // 方式二：单字段对比（兼容旧 API）
 const result = render({
   container: document.getElementById('diffContainer'),
@@ -103,6 +110,15 @@ const rawData = render({
   newContent: '<p>新内容</p>'
 })
 ```
+
+### 多字段对比特性
+
+- **表单布局**：以左侧标签、右侧内容的形式展示各字段
+- **自动排序**：按 `fields` 中的 `sort` 属性排序
+- **智能检测**：自动判断字段内容是否为 HTML（使用 `diffHTML` 或 `diffText`）
+- **标记合并**：相邻的 add/del 标记自动合并为 modify 类型
+- **精准定位**：LeaderLine 连线指向具体的 `<ins>`/`<del>` 节点，而非字段容器
+- **交互反馈**：悬停标记时自动高亮对应字段并显示连线
 
 ### 提取变更标记
 
