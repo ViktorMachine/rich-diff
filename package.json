@@ -1,6 +1,6 @@
 {
   "name": "gpower-rich-diff",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "可扩展的富文本对比框架，支持多引擎、多类型内容对比、多字段表单布局",
   "main": "dist/rich-diff.umd.js",
   "module": "dist/rich-diff.esm.js",
