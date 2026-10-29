@@ -211,6 +211,12 @@ const DEFAULT_STYLES = `
     color: #999;
     font-style: italic;
   }
+
+  /* LeaderLine 连线样式 */
+  svg.leader-line {
+    z-index: 99999 !important;
+    pointer-events: none !important;
+  }
 `
 
 /**

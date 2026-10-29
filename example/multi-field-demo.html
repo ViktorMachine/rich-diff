@@ -164,7 +164,11 @@
   </div>
 
   <script type="module">
-    import { render } from '../dist/rich-diff.dev.js'
+    // 使用 CDN 加载（发布到 npm 后可用）
+    import { render } from 'https://cdn.jsdelivr.net/npm/gpower-rich-diff@1.0.2/+esm'
+
+    // 本地开发时使用（取消下面这行注释）
+    // import { render } from '../dist/rich-diff.dev.js'
 
     // 字段配置
     const FIELDS = [
