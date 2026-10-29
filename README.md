@@ -1,4 +1,4 @@
-# Rich-Diff
+# gpower-rich-diff
 
 可扩展的富文本对比框架，支持 HTML、文本、媒体资源的差异对比与可视化。
 
@@ -9,12 +9,87 @@
 - **结构化标记**：提取差异标记，便于可视化展示
 - **LeaderLine 连线**：内置连线功能，支持标记与内容的关联展示
 - **自定义渲染器**：可替换默认渲染模板
+- **多字段对比**：支持表单布局的多字段对比展示
 
 ## 安装
 
 ```bash
-npm install rich-diff
+npm install gpower-rich-diff
 ```
+
+## 使用方式
+
+本库提供 **ESM** 和 **UMD** 两种格式，适应不同的使用场景：
+
+### 方式一：ESM 格式（推荐）
+
+适用于现代打包工具（Webpack、Vite、Rollup 等）和浏览器原生模块：
+
+```javascript
+// 使用打包工具（Webpack/Vite 等）
+import { render, diffHTML, diffText } from 'gpower-rich-diff'
+
+// 浏览器原生模块
+<script type="module">
+  import { render } from './node_modules/gpower-rich-diff/dist/rich-diff.esm.js'
+  render({ ... })
+</script>
+```
+
+**特点**：
+
+- 支持 tree-shaking（已配置 `sideEffects: true`，确保 LeaderLine 正常初始化）
+- 更小的最终打包体积
+- 现代浏览器原生支持
+- 构建产物：`dist/rich-diff.esm.js`（压缩版）、`dist/rich-diff.dev.js`（调试版）
+
+### 方式二：UMD 格式
+
+适用于传统 `<script>` 标签引入或旧环境：
+
+```html
+<!-- 直接引入 UMD 文件 -->
+<script src="./node_modules/gpower-rich-diff/dist/rich-diff.umd.js"></script>
+<script>
+  // 全局变量 RichDiff
+  const result = RichDiff.render({ ... })
+</script>
+```
+
+**特点**：
+
+- 暴露全局变量 `RichDiff`
+- 兼容 AMD、CommonJS 和浏览器全局变量
+- 无需构建工具即可使用
+- 构建产物：`dist/rich-diff.umd.js`
+
+### CDN 引入（推荐用于演示）
+
+```html
+<!-- 使用 unpkg CDN -->
+<script src="https://unpkg.com/gpower-rich-diff/dist/rich-diff.umd.js"></script>
+<script>
+  const result = RichDiff.render({ ... })
+</script>
+
+<!-- 或使用 ESM 模块 -->
+<script type="module">
+  import { render } from 'https://unpkg.com/gpower-rich-diff/dist/rich-diff.esm.js'
+  render({ ... })
+</script>
+```
+
+### 注意事项
+
+1. **Tree-shaking 配置**：本库已在 `package.json` 中设置 `sideEffects: true`，确保 LeaderLine 等副作用代码不被错误移除。无需额外配置。
+
+2. **依赖内置**：所有依赖（`@lionad/leader-line`、`diff-dom`、`htmldiff-js`）已打包进产物，无需额外安装依赖。
+
+3. **调试版本**：开发时可使用 `dist/rich-diff.dev.js`（未压缩，保留调试信息）：
+
+   ```javascript
+   import { render } from 'gpower-rich-diff/dist/rich-diff.dev.js'
+   ```
 
 ## 快速开始
 
