@@ -5,6 +5,7 @@
   "main": "dist/rich-diff.umd.js",
   "module": "dist/rich-diff.esm.js",
   "type": "module",
+  "sideEffects": true,
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
