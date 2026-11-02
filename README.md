@@ -287,6 +287,65 @@ const myRenderer = {
 setRenderer(myRenderer)
 ```
 
+## 样式对比
+
+### 基本用法
+
+```javascript
+import { diffStyle } from 'gpower-rich-diff'
+
+const oldHtml = '<p style="color:red;font-size:14px">内容</p>'
+const newHtml = '<p style="color:blue;font-size:16px">内容</p>'
+
+const result = diffStyle(oldHtml, newHtml)
+console.log(result.hasStyleDiff)  // true
+console.log(result.styleChanges)  // [...]
+```
+
+### 结合 render 使用
+
+```javascript
+import { render } from 'gpower-rich-diff'
+
+render({
+  container: document.getElementById('diffContainer'),
+  oldData: { content: oldHtml },
+  newData: { content: newHtml },
+  fields: [{ label: '内容', field: 'content', sort: 1 }],
+  detectStyle: true,  // 启用样式检测
+  styleDiffConfig: {
+    matchStrategy: 'auto'  // 元素匹配策略
+  }
+})
+```
+
+### 样式配置选项
+
+```javascript
+{
+  detectStyle: true,  // 是否检测样式变更
+  styleDiffConfig: {
+    matchStrategy: 'auto',  // 'id' | 'path' | 'auto'
+    ignoreProperties: ['opacity']  // 忽略的属性
+  }
+}
+```
+
+### 弹窗交互
+
+当鼠标悬浮在有样式变更的 marker 上时，会自动显示弹窗：
+- 左侧展示旧版本的 HTML 渲染效果
+- 右侧展示新版本的 HTML 渲染效果
+- 底部列出具体的属性变更
+
+### 样式对比 API
+
+| 方法 | 说明 | 参数 | 返回值 |
+|------|------|------|--------|
+| `diffStyle(oldHtml, newHtml, options)` | 对比 HTML 样式差异 | `oldHtml`: 旧 HTML<br>`newHtml`: 新 HTML<br>`options`: 配置选项 | `{ hasStyleDiff, styleChanges }` |
+| `parseStyle(styleString)` | 解析样式字符串 | `styleString`: 样式字符串 | `{ property: value }` |
+| `compareStyles(oldStyle, newStyle)` | 对比两个样式对象 | `oldStyle`: 旧样式<br>`newStyle`: 新样式 | `{ added, removed, changed }` |
+
 ## 自定义对比引擎
 
 ```javascript
