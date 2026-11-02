@@ -36,7 +36,7 @@ const DEFAULT_STYLES = `
     border-right: 1px solid #e9ecef;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 16px;
+    padding: 0 16px;
     box-sizing: border-box;
     flex-shrink: 0;
   }
@@ -142,6 +142,13 @@ const DEFAULT_STYLES = `
     font-family: monospace;
   }
 
+  /* 左侧 marker 区域图片自适应 */
+  .rich-diff-markers-panel img {
+    max-width: 120px;
+    height: auto;
+    display: block;
+  }
+
   /* 右侧内容面板 */
   .rich-diff-content-panel {
     flex: 1;
@@ -149,7 +156,7 @@ const DEFAULT_STYLES = `
     background: #fff;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 20px;
+    padding: 0 20px;
     box-sizing: border-box;
   }
 
@@ -478,9 +485,15 @@ function createFieldMarkers(html, field, label, index) {
     const attrs = match[2]
     const content = match[3]
 
-    // 解析属性
+    // 解析属性：必须有 data-diff 属性才识别为差异标记
     const diffTypeMatch = attrs.match(/data-diff="([^"]+)"/)
-    const diffType = diffTypeMatch ? diffTypeMatch[1] : (tagType === 'ins' ? 'add' : 'del')
+
+    // 如果没有 data-diff 属性，说明是原内容的原生标签，跳过不处理
+    if (!diffTypeMatch) {
+      continue
+    }
+
+    const diffType = diffTypeMatch[1]
 
     // 检查是否已有 data-diff-id 或 data-marker-id
     const diffIdMatch = attrs.match(/data-diff-id="([^"]+)"/)
