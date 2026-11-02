@@ -3053,26 +3053,46 @@ function resetAllCounters() {
 
 /**
  * 对比单个字段
- * @param {string} oldVal - 旧值
- * @param {string} newVal - 新值
+ * @param {string|Array} oldVal - 旧值
+ * @param {string|Array} newVal - 新值
  * @param {string} fieldName - 字段名称
  * @param {Object} options - 配置选项
- * @returns {Object} { html, useShadowDOM, markers }
+ * @param {string} options.type - 字段类型: 'normal' | 'dynamic' | 'file' | 'files' | 'image' | 'images' | 'video' | 'videos'
+ * @param {boolean} options.mayContainHtml - 是否可能包含 HTML
+ * @returns {Object} { html, useShadowDOM, markers, hasDiff }
  */
 function diffField(oldVal, newVal, fieldName, options) {
   if (options === void 0) {
     options = {};
   }
   var _options = options,
+    _options$type = _options.type,
+    type = _options$type === void 0 ? 'normal' : _options$type,
     _options$mayContainHt = _options.mayContainHtml,
     mayContainHtml = _options$mayContainHt === void 0 ? false : _options$mayContainHt;
 
-  // 快速相等判断
+  // 根据 type 选择对比方式
+  if (type === 'dynamic') {
+    return diffDynamicField(oldVal, newVal, fieldName);
+  }
+
+  // 资源类型：file, image, video（单数）
+  if (type === 'file' || type === 'image' || type === 'video') {
+    return diffResourceField(oldVal, newVal, fieldName, type);
+  }
+
+  // 资源类型：files, images, videos（复数）
+  if (type === 'files' || type === 'images' || type === 'videos') {
+    return diffResourcesField(oldVal, newVal, fieldName, type);
+  }
+
+  // normal 类型：快速相等判断
   if (oldVal === newVal) {
     return {
       html: newVal,
       useShadowDOM: false,
-      markers: []
+      markers: [],
+      hasDiff: false
     };
   }
   var oldStr = String(oldVal || '');
@@ -3083,6 +3103,363 @@ function diffField(oldVal, newVal, fieldName, options) {
     return diffHTML(oldStr, newStr, fieldName);
   }
   return diffText(oldStr, newStr, fieldName);
+}
+
+/**
+ * 对比单个资源字段
+ * @param {string} oldVal - 旧值（资源地址）
+ * @param {string} newVal - 新值（资源地址）
+ * @param {string} fieldName - 字段名称
+ * @param {string} resourceType - 资源类型: 'file' | 'image' | 'video'
+ * @returns {Object} { html, useShadowDOM, markers, hasDiff }
+ */
+function diffResourceField(oldVal, newVal, fieldName, resourceType) {
+  var oldUrl = String(oldVal || '');
+  var newUrl = String(newVal || '');
+
+  // 快速判断
+  if (oldUrl === newUrl) {
+    return {
+      html: newUrl,
+      useShadowDOM: false,
+      markers: [],
+      hasDiff: false,
+      resourceType: resourceType,
+      oldResource: oldUrl ? {
+        url: oldUrl,
+        diffType: 'same'
+      } : null,
+      newResource: newUrl ? {
+        url: newUrl,
+        diffType: 'same'
+      } : null
+    };
+  }
+  var result = {
+    html: newUrl,
+    useShadowDOM: false,
+    markers: [],
+    hasDiff: true,
+    resourceType: resourceType,
+    oldResource: null,
+    newResource: null
+  };
+  if (!oldUrl && newUrl) {
+    // 新增资源
+    result.newResource = {
+      url: newUrl,
+      diffType: 'add'
+    };
+    result.html = wrapWithDiffTag(newUrl, 'add', fieldName);
+  } else if (oldUrl && !newUrl) {
+    // 删除资源
+    result.oldResource = {
+      url: oldUrl,
+      diffType: 'del'
+    };
+    result.html = wrapWithDiffTag(oldUrl, 'del', fieldName);
+  } else {
+    // 资源变更
+    result.oldResource = {
+      url: oldUrl,
+      diffType: 'del'
+    };
+    result.newResource = {
+      url: newUrl,
+      diffType: 'add'
+    };
+    var diffResult = diffText(oldUrl, newUrl, fieldName);
+    result.html = diffResult.html;
+    result.markers = diffResult.markers;
+  }
+  return result;
+}
+
+/**
+ * 对比资源数组字段
+ * @param {Array|string} oldVal - 旧值（资源地址数组）
+ * @param {Array|string} newVal - 新值（资源地址数组）
+ * @param {string} fieldName - 字段名称
+ * @param {string} resourceType - 资源类型: 'files' | 'images' | 'videos'
+ * @returns {Object} { html, useShadowDOM, markers, hasDiff }
+ */
+function diffResourcesField(oldVal, newVal, fieldName, resourceType) {
+  var oldArr = normalizeArray(oldVal);
+  var newArr = normalizeArray(newVal);
+
+  // 快速判断
+  if (arraysEqual(oldArr, newArr)) {
+    return {
+      html: newArr,
+      useShadowDOM: false,
+      markers: [],
+      hasDiff: false,
+      resourceType: resourceType,
+      oldResources: oldArr.map(function (url) {
+        return {
+          url: url,
+          diffType: 'same'
+        };
+      }),
+      newResources: newArr.map(function (url) {
+        return {
+          url: url,
+          diffType: 'same'
+        };
+      })
+    };
+  }
+  return diffResourceArrays(oldArr, newArr, fieldName, resourceType);
+}
+
+/**
+ * 标准化数组
+ * @param {Array|string} val - 输入值
+ * @returns {Array} 标准化后的数组
+ */
+function normalizeArray(val) {
+  if (!val) return [];
+  if (typeof val === 'string') {
+    try {
+      var parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_unused) {
+      // 如果不是 JSON，尝试按逗号分割
+      return val.split(',').map(function (s) {
+        return s.trim();
+      }).filter(Boolean);
+    }
+  }
+  return Array.isArray(val) ? val : [];
+}
+
+/**
+ * 判断两个数组是否相等
+ * @param {Array} a - 数组 a
+ * @param {Array} b - 数组 b
+ * @returns {boolean}
+ */
+function arraysEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * 对比资源数组
+ * @param {Array} oldArr - 旧数组
+ * @param {Array} newArr - 新数组
+ * @param {string} fieldName - 字段名称
+ * @param {string} resourceType - 资源类型
+ * @returns {Object} { html, useShadowDOM, markers, hasDiff }
+ */
+function diffResourceArrays(oldArr, newArr, fieldName, resourceType) {
+  var result = [];
+  var markers = [];
+
+  // 建立索引映射
+  var oldSet = new Set(oldArr);
+  var newSet = new Set(newArr);
+
+  // 处理旧资源
+  var oldResources = oldArr.map(function (url) {
+    var exists = newSet.has(url);
+    return {
+      url: url,
+      diffType: exists ? 'same' : 'del'
+    };
+  });
+
+  // 处理新资源
+  var newResources = newArr.map(function (url) {
+    var exists = oldSet.has(url);
+    return {
+      url: url,
+      diffType: exists ? 'same' : 'add'
+    };
+  });
+
+  // 生成差异结果
+  var allUrls = new Set([].concat(oldArr, newArr));
+  var hasDiff = false;
+  allUrls.forEach(function (url) {
+    var inOld = oldSet.has(url);
+    var inNew = newSet.has(url);
+    var item = {
+      url: url,
+      diffType: 'same',
+      diffHtml: ''
+    };
+    if (!inOld && inNew) {
+      item.diffType = 'add';
+      item.diffHtml = wrapWithDiffTag(url, 'add', fieldName);
+      hasDiff = true;
+    } else if (inOld && !inNew) {
+      item.diffType = 'del';
+      item.diffHtml = wrapWithDiffTag(url, 'del', fieldName);
+      hasDiff = true;
+    } else {
+      item.diffHtml = url;
+    }
+    result.push(item);
+  });
+
+  // 按 diffType 排序：del > add > same
+  var typeOrder = {
+    del: 0,
+    add: 1,
+    same: 2
+  };
+  result.sort(function (a, b) {
+    return typeOrder[a.diffType] - typeOrder[b.diffType];
+  });
+  return {
+    html: result,
+    useShadowDOM: false,
+    markers: markers,
+    hasDiff: hasDiff,
+    resourceType: resourceType,
+    oldResources: oldResources,
+    newResources: newResources
+  };
+}
+
+/**
+ * 对比动态字段（数组对象）
+ * @param {Array} oldVal - 旧值数组，格式: [{ label, value, sort }]
+ * @param {Array} newVal - 新值数组，格式: [{ label, value, sort }]
+ * @param {string} fieldName - 字段名称
+ * @returns {Object} { html, useShadowDOM, markers, hasDiff }
+ */
+function diffDynamicField(oldVal, newVal, fieldName) {
+  var oldArr = normalizeDynamicArray(oldVal);
+  var newArr = normalizeDynamicArray(newVal);
+
+  // 对比并生成差异结果
+  var result = diffDynamicArrays(oldArr, newArr, fieldName);
+  return result;
+}
+
+/**
+ * 标准化动态字段数组
+ * @param {Array|string} val - 输入值
+ * @returns {Array} 标准化后的数组
+ */
+function normalizeDynamicArray(val) {
+  if (!val) return [];
+  if (typeof val === 'string') {
+    try {
+      var parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_unused2) {
+      return [];
+    }
+  }
+  return Array.isArray(val) ? val : [];
+}
+
+/**
+ * 对比两个动态字段数组
+ * @param {Array} oldArr - 旧数组
+ * @param {Array} newArr - 新数组
+ * @param {string} fieldName - 字段名称
+ * @returns {Object} { html, useShadowDOM, markers, hasDiff }
+ */
+function diffDynamicArrays(oldArr, newArr, fieldName) {
+  var result = [];
+  var markers = [];
+
+  // 建立索引映射（过滤掉没有 label 的项）
+  var oldMap = new Map(oldArr.filter(function (item) {
+    return item && item.label;
+  }).map(function (item) {
+    return [item.label, item];
+  }));
+  var newMap = new Map(newArr.filter(function (item) {
+    return item && item.label;
+  }).map(function (item) {
+    return [item.label, item];
+  }));
+
+  // 获取所有标签
+  var oldLabels = Array.from(oldMap.keys());
+  var newLabels = Array.from(newMap.keys());
+  var allLabels = new Set([].concat(oldLabels, newLabels));
+
+  // 快速判断：如果标签集合相同且所有值相同，则无差异
+  var hasDiff = oldMap.size !== newMap.size;
+  allLabels.forEach(function (label) {
+    var _ref, _newItem$sort;
+    var oldItem = oldMap.get(label);
+    var newItem = newMap.get(label);
+    var processedItem = {
+      label: label,
+      value: '',
+      sort: (_ref = (_newItem$sort = newItem == null ? void 0 : newItem.sort) != null ? _newItem$sort : oldItem == null ? void 0 : oldItem.sort) != null ? _ref : 0,
+      diffType: 'same',
+      diffHtml: ''
+    };
+    if (!oldItem && newItem) {
+      var _newItem$value, _newItem$value2;
+      // 新增项
+      processedItem.value = (_newItem$value = newItem.value) != null ? _newItem$value : '';
+      processedItem.diffType = 'add';
+      processedItem.diffHtml = wrapWithDiffTag((_newItem$value2 = newItem.value) != null ? _newItem$value2 : '', 'add', fieldName);
+      hasDiff = true;
+    } else if (oldItem && !newItem) {
+      var _oldItem$value, _oldItem$value2;
+      // 删除项
+      processedItem.value = (_oldItem$value = oldItem.value) != null ? _oldItem$value : '';
+      processedItem.diffType = 'del';
+      processedItem.diffHtml = wrapWithDiffTag((_oldItem$value2 = oldItem.value) != null ? _oldItem$value2 : '', 'del', fieldName);
+      hasDiff = true;
+    } else if (oldItem && newItem) {
+      if (oldItem.value !== newItem.value) {
+        var _newItem$value3;
+        // 值变更
+        processedItem.value = (_newItem$value3 = newItem.value) != null ? _newItem$value3 : '';
+        processedItem.diffType = 'change';
+        var diffResult = diffText(String(oldItem.value || ''), String(newItem.value || ''), fieldName);
+        processedItem.diffHtml = diffResult.html;
+        markers.push.apply(markers, diffResult.markers);
+        hasDiff = true;
+      } else {
+        var _newItem$value4, _newItem$value5;
+        // 无变化
+        processedItem.value = (_newItem$value4 = newItem.value) != null ? _newItem$value4 : '';
+        processedItem.diffType = 'same';
+        processedItem.diffHtml = (_newItem$value5 = newItem.value) != null ? _newItem$value5 : '';
+      }
+    }
+    result.push(processedItem);
+  });
+
+  // 按 sort 重新排序
+  result.sort(function (a, b) {
+    return a.sort - b.sort;
+  });
+  return {
+    html: result,
+    useShadowDOM: false,
+    markers: markers,
+    hasDiff: hasDiff
+  };
+}
+
+/**
+ * 用差异标签包裹内容
+ * @param {string} content - 内容
+ * @param {string} type - 差异类型: 'add' | 'del'
+ * @param {string} fieldName - 字段名称
+ * @returns {string}
+ */
+function wrapWithDiffTag(content, type, fieldName) {
+  var tag = type === 'add' ? 'ins' : 'del';
+  var color = type === 'add' ? '#1878E8' : 'red';
+  var diffId = fieldName + "_" + type + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+  return "<" + tag + " style=\"color: " + color + ";\" data-diff=\"" + type + "\" data-diff-id=\"" + diffId + "\" data-diff-field=\"" + fieldName + "\">" + content + "</" + tag + ">";
 }
 
 /**
@@ -8217,7 +8594,7 @@ var popupInstance = null;
 var markerStore = new Map();
 
 // 默认样式
-var DEFAULT_STYLES = "\n  .rich-diff-container {\n    display: flex;\n    height: 100%;\n    min-height: 400px;\n    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n    font-size: 14px;\n    line-height: 1.6;\n    color: #333;\n    background: #f5f7fa;\n  }\n\n  /* \u5DE6\u4FA7\u53D8\u66F4\u6807\u8BB0\u9762\u677F */\n  .rich-diff-markers-panel {\n    width: 320px;\n    min-width: 280px;\n    background: #fff;\n    border-right: 1px solid #e9ecef;\n    overflow-y: auto;\n    padding: 16px;\n  }\n\n  .rich-diff-markers-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n  }\n\n  .rich-diff-stats {\n    display: flex;\n    gap: 12px;\n    padding: 8px 12px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    margin-bottom: 12px;\n  }\n\n  .rich-diff-stat {\n    display: flex;\n    align-items: center;\n    gap: 4px;\n    font-size: 12px;\n  }\n\n  .rich-diff-stat-dot {\n    width: 8px;\n    height: 8px;\n    border-radius: 50%;\n  }\n\n  .rich-diff-stat-dot.add { background: #1878E8; }\n  .rich-diff-stat-dot.del { background: #D32F2F; }\n  .rich-diff-stat-dot.modify { background: #E65100; }\n\n  .rich-diff-marker-item {\n    padding: 10px 12px;\n    margin-bottom: 6px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    cursor: pointer;\n    transition: all 0.2s;\n    border-left: 3px solid transparent;\n  }\n\n  .rich-diff-marker-item:hover {\n    background: #e9ecef;\n    transform: translateX(2px);\n  }\n\n  .rich-diff-marker-item.active {\n    background: #e8f4ff;\n    border-left-color: #1878E8;\n  }\n\n  .rich-diff-marker-item.add { border-left-color: #1878E8; }\n  .rich-diff-marker-item.del { border-left-color: #D32F2F; }\n  .rich-diff-marker-item.modify { border-left-color: #E65100; }\n\n  .rich-diff-marker-header {\n    display: flex;\n    align-items: center;\n    gap: 6px;\n    margin-bottom: 4px;\n  }\n\n  .rich-diff-marker-type {\n    display: inline-block;\n    padding: 1px 6px;\n    border-radius: 3px;\n    font-size: 11px;\n    font-weight: 600;\n  }\n\n  .rich-diff-marker-type.add { background: #E8F4FF; color: #1878E8; }\n  .rich-diff-marker-type.del { background: #FFEBEE; color: #D32F2F; }\n  .rich-diff-marker-type.modify { background: #FFF3E0; color: #E65100; }\n\n  .rich-diff-marker-field {\n    font-weight: 600;\n    font-size: 12px;\n  }\n\n  .rich-diff-marker-content {\n    font-size: 11px;\n    color: #666;\n    margin-top: 4px;\n    word-break: break-all;\n  }\n\n  .rich-diff-marker-content .old { color: #D32F2F; }\n  .rich-diff-marker-content .new { color: #1878E8; }\n\n  /* \u53F3\u4FA7\u5185\u5BB9\u9762\u677F */\n  .rich-diff-content-panel {\n    flex: 1;\n    background: #fff;\n    overflow-y: auto;\n    padding: 20px;\n  }\n\n  .rich-diff-content-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n  }\n\n  /* \u8868\u5355\u5E03\u5C40 */\n  .rich-diff-form {\n    max-width: 800px;\n  }\n\n  .rich-diff-field {\n    display: flex;\n    margin-bottom: 16px;\n    padding: 12px;\n    background: #fafafa;\n    border-radius: 6px;\n    border: 1px solid #eee;\n    transition: all 0.2s;\n  }\n\n  .rich-diff-field:hover {\n    background: #f5f5f5;\n  }\n\n  .rich-diff-field.highlight {\n    background: #e8f4ff;\n    border-color: #1878E8;\n    box-shadow: 0 0 0 2px rgba(24, 120, 232, 0.2);\n  }\n\n  .rich-diff-field-label {\n    width: 100px;\n    min-width: 100px;\n    font-weight: 600;\n    color: #555;\n    padding-right: 12px;\n    border-right: 1px solid #ddd;\n    display: flex;\n    align-items: flex-start;\n  }\n\n  .rich-diff-field-content {\n    flex: 1;\n    padding-left: 12px;\n    line-height: 1.8;\n    word-break: break-word;\n  }\n\n  /* \u5DEE\u5F02\u6837\u5F0F */\n  .rich-diff-field-content ins,\n  .rich-diff-field-content .diff-add,\n  .rich-diff-field-content difftext[data-diff=\"add\"] {\n    color: #1878E8;\n    background: #E8F4FF;\n    text-decoration: none;\n    padding: 1px 3px;\n    border-radius: 2px;\n  }\n\n  .rich-diff-field-content del,\n  .rich-diff-field-content .diff-del,\n  .rich-diff-field-content difftext[data-diff=\"del\"] {\n    color: #D32F2F;\n    background: #FFEBEE;\n    text-decoration: line-through;\n    padding: 1px 3px;\n    border-radius: 2px;\n  }\n\n  .rich-diff-empty {\n    text-align: center;\n    color: #999;\n    padding: 40px 20px;\n  }\n\n  .rich-diff-no-change {\n    color: #999;\n    font-style: italic;\n  }\n\n  /* LeaderLine \u8FDE\u7EBF\u6837\u5F0F */\n  svg.leader-line {\n    z-index: 99999 !important;\n    pointer-events: none !important;\n  }\n";
+var DEFAULT_STYLES = "\n  .rich-diff-container {\n    display: flex;\n    height: 600px;\n    max-height: 80vh;\n    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n    font-size: 14px;\n    line-height: 1.6;\n    color: #333;\n    background: #f5f7fa;\n  }\n\n  /* \u5DE6\u4FA7\u53D8\u66F4\u6807\u8BB0\u9762\u677F */\n  .rich-diff-markers-panel {\n    width: 320px;\n    min-width: 280px;\n    max-width: 400px;\n    height: 100%;\n    background: #fff;\n    border-right: 1px solid #e9ecef;\n    overflow-y: auto;\n    overflow-x: hidden;\n    padding: 16px;\n    box-sizing: border-box;\n    flex-shrink: 0;\n  }\n\n  .rich-diff-markers-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n    position: sticky;\n    top: 0;\n    background: #fff;\n    z-index: 1;\n  }\n\n  .rich-diff-stats {\n    display: flex;\n    gap: 12px;\n    padding: 8px 12px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    margin-bottom: 12px;\n  }\n\n  .rich-diff-stat {\n    display: flex;\n    align-items: center;\n    gap: 4px;\n    font-size: 12px;\n  }\n\n  .rich-diff-stat-dot {\n    width: 8px;\n    height: 8px;\n    border-radius: 50%;\n  }\n\n  .rich-diff-stat-dot.add { background: #1878E8; }\n  .rich-diff-stat-dot.del { background: #D32F2F; }\n  .rich-diff-stat-dot.modify { background: #E65100; }\n\n  .rich-diff-marker-item {\n    padding: 10px 12px;\n    margin-bottom: 6px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    cursor: pointer;\n    transition: all 0.2s;\n    border-left: 3px solid transparent;\n  }\n\n  .rich-diff-marker-item:hover {\n    background: #e9ecef;\n    transform: translateX(2px);\n  }\n\n  .rich-diff-marker-item.active {\n    background: #e8f4ff;\n    border-left-color: #1878E8;\n  }\n\n  .rich-diff-marker-item.add { border-left-color: #1878E8; }\n  .rich-diff-marker-item.del { border-left-color: #D32F2F; }\n  .rich-diff-marker-item.modify { border-left-color: #E65100; }\n\n  .rich-diff-marker-header {\n    display: flex;\n    align-items: center;\n    gap: 6px;\n    margin-bottom: 4px;\n  }\n\n  .rich-diff-marker-type {\n    display: inline-block;\n    padding: 1px 6px;\n    border-radius: 3px;\n    font-size: 11px;\n    font-weight: 600;\n  }\n\n  .rich-diff-marker-type.add { background: #E8F4FF; color: #1878E8; }\n  .rich-diff-marker-type.del { background: #FFEBEE; color: #D32F2F; }\n  .rich-diff-marker-type.modify { background: #FFF3E0; color: #E65100; }\n\n  .rich-diff-marker-field {\n    font-weight: 600;\n    font-size: 12px;\n  }\n\n  .rich-diff-marker-content {\n    font-size: 11px;\n    color: #666;\n    margin-top: 4px;\n    word-break: break-all;\n  }\n\n  .rich-diff-marker-content .old { color: #D32F2F; }\n  .rich-diff-marker-content .new { color: #1878E8; }\n\n  .rich-diff-marker-content .marker-prefix {\n    font-weight: bold;\n    font-family: monospace;\n  }\n\n  /* \u53F3\u4FA7\u5185\u5BB9\u9762\u677F */\n  .rich-diff-content-panel {\n    flex: 1;\n    height: 100%;\n    background: #fff;\n    overflow-y: auto;\n    overflow-x: hidden;\n    padding: 20px;\n    box-sizing: border-box;\n  }\n\n  .rich-diff-content-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n    position: sticky;\n    top: 0;\n    background: #fff;\n    z-index: 1;\n  }\n\n  /* \u8868\u5355\u5E03\u5C40 */\n  .rich-diff-form {\n    max-width: 800px;\n  }\n\n  /* \u9632\u6B62\u5185\u5BB9\u6EA2\u51FA */\n  .rich-diff-form *,\n  .rich-diff-form *::before,\n  .rich-diff-form *::after {\n    max-width: 100%;\n    box-sizing: border-box;\n  }\n\n  /* \u56FE\u7247/\u89C6\u9891\u81EA\u9002\u5E94 */\n  .rich-diff-form img,\n  .rich-diff-form video,\n  .rich-diff-form audio,\n  .rich-diff-form iframe,\n  .rich-diff-form embed,\n  .rich-diff-form object {\n    max-width: 100%;\n    height: auto;\n    display: block;\n  }\n\n  /* \u957F\u6587\u672C/URL \u81EA\u52A8\u6362\u884C */\n  .rich-diff-form pre,\n  .rich-diff-form code,\n  .rich-diff-form a {\n    word-break: break-word;\n    overflow-wrap: break-word;\n  }\n\n  /* \u8868\u683C\u6EA2\u51FA\u5904\u7406 */\n  .rich-diff-form table {\n    width: 100%;\n    table-layout: fixed;\n    overflow-x: auto;\n    display: block;\n  }\n\n  /* \u4EE3\u7801\u5757\u6A2A\u5411\u6EDA\u52A8 */\n  .rich-diff-form pre {\n    overflow-x: auto;\n    white-space: pre-wrap;\n    word-wrap: break-word;\n  }\n\n  .rich-diff-field {\n    display: flex;\n    margin-bottom: 16px;\n    padding: 12px;\n    background: #fafafa;\n    border-radius: 6px;\n    border: 1px solid #eee;\n    transition: all 0.2s;\n  }\n\n  .rich-diff-field:hover {\n    background: #f5f5f5;\n  }\n\n  .rich-diff-field.highlight {\n    background: #e8f4ff;\n    border-color: #1878E8;\n    box-shadow: 0 0 0 2px rgba(24, 120, 232, 0.2);\n  }\n\n  .rich-diff-field-label {\n    width: 100px;\n    min-width: 100px;\n    font-weight: 600;\n    color: #555;\n    padding-right: 12px;\n    border-right: 1px solid #ddd;\n    display: flex;\n    align-items: flex-start;\n  }\n\n  .rich-diff-field-content {\n    flex: 1;\n    padding-left: 12px;\n    line-height: 1.8;\n    word-break: break-word;\n  }\n\n  /* \u5DEE\u5F02\u6837\u5F0F */\n  .rich-diff-field-content ins,\n  .rich-diff-field-content .diff-add,\n  .rich-diff-field-content difftext[data-diff=\"add\"] {\n    color: #1878E8;\n    background: #E8F4FF;\n    text-decoration: none;\n    padding: 1px 3px;\n    border-radius: 2px;\n  }\n\n  .rich-diff-field-content del,\n  .rich-diff-field-content .diff-del,\n  .rich-diff-field-content difftext[data-diff=\"del\"] {\n    color: #D32F2F;\n    background: #FFEBEE;\n    text-decoration: line-through;\n    padding: 1px 3px;\n    border-radius: 2px;\n  }\n\n  .rich-diff-empty {\n    text-align: center;\n    color: #999;\n    padding: 40px 20px;\n  }\n\n  .rich-diff-no-change {\n    color: #999;\n    font-style: italic;\n  }\n\n  /* LeaderLine \u8FDE\u7EBF\u6837\u5F0F */\n  svg.leader-line {\n    z-index: 99999 !important;\n    pointer-events: none !important;\n  }\n";
 
 /**
  * 默认渲染器
@@ -8622,9 +8999,11 @@ function renderMarkersList(listEl, markers) {
       del: '删除',
       modify: '修改'
     }[typeClass] || typeClass;
-    var oldText = escapeHtml(marker.oldValue || '');
-    var newText = escapeHtml(marker.newValue || '');
-    return "\n      <div class=\"rich-diff-marker-item " + typeClass + "\" data-marker-index=\"" + index + "\" data-marker-id=\"" + marker.id + "\" data-marker-field=\"" + marker.field + "\">\n        <div class=\"rich-diff-marker-header\">\n          <span class=\"rich-diff-marker-type " + typeClass + "\">" + typeText + "</span>\n          <span class=\"rich-diff-marker-field\">" + (marker.fieldLabel || marker.field) + "</span>\n        </div>\n        <div class=\"rich-diff-marker-content\">\n          " + (oldText ? "<div class=\"old\">- " + truncate(oldText, 60) + "</div>" : '') + "\n          " + (newText ? "<div class=\"new\">+ " + truncate(newText, 60) + "</div>" : '') + "\n        </div>\n      </div>\n    ";
+
+    // 渲染 HTML 内容而非源代码
+    var oldContent = marker.oldValue || '';
+    var newContent = marker.newValue || '';
+    return "\n      <div class=\"rich-diff-marker-item " + typeClass + "\" data-marker-index=\"" + index + "\" data-marker-id=\"" + marker.id + "\" data-marker-field=\"" + marker.field + "\">\n        <div class=\"rich-diff-marker-header\">\n          <span class=\"rich-diff-marker-type " + typeClass + "\">" + typeText + "</span>\n          <span class=\"rich-diff-marker-field\">" + (marker.fieldLabel || marker.field) + "</span>\n        </div>\n        <div class=\"rich-diff-marker-content\">\n          " + (oldContent ? "<div class=\"old\"><span class=\"marker-prefix\">- </span>" + truncateHtml(oldContent, 60) + "</div>" : '') + "\n          " + (newContent ? "<div class=\"new\"><span class=\"marker-prefix\">+ </span>" + truncateHtml(newContent, 60) + "</div>" : '') + "\n        </div>\n      </div>\n    ";
   }).join('');
 }
 
@@ -8675,21 +9054,56 @@ function renderUI(container, result, markers, fieldName, config) {
  * 绑定交互事件
  */
 function bindInteractions(elements, markers, config) {
+  var _elements$contentPane;
   if (config === void 0) {
     config = {};
   }
   var state = {
     currentConnector: null,
-    activeMarker: null
+    activeMarker: null,
+    pendingTargetEl: null,
+    scrollTimeout: null,
+    isScrolling: false
   };
   var _config2 = config,
     _config2$detectStyle = _config2.detectStyle,
     detectStyle = _config2$detectStyle === void 0 ? false : _config2$detectStyle;
 
+  // 滚动监听（只监听右侧内容面板）
+  var handleContentScroll = function handleContentScroll() {
+    // 滚动时清除连线
+    if (state.currentConnector) {
+      try {
+        state.currentConnector.line.remove();
+      } catch (e) {}
+      state.currentConnector = null;
+    }
+    clearConnectors();
+
+    // 标记滚动状态
+    state.isScrolling = true;
+
+    // 防抖：滚动结束后重置状态
+    if (state.scrollTimeout) {
+      clearTimeout(state.scrollTimeout);
+    }
+    state.scrollTimeout = setTimeout(function () {
+      state.isScrolling = false;
+    }, 150);
+  };
+
+  // 只监听右侧内容面板的滚动
+  (_elements$contentPane = elements.contentPanel) == null || _elements$contentPane.addEventListener('scroll', handleContentScroll, {
+    passive: true
+  });
+
   // 鼠标进入标记项
   elements.markersList.addEventListener('mouseenter', function (e) {
     var item = e.target.closest('.rich-diff-marker-item');
     if (!item) return;
+
+    // 如果已经激活了同一个 marker，跳过
+    if (state.activeMarker === item) return;
     var markerId = item.dataset.markerId;
     var markerIndex = parseInt(item.dataset.markerIndex, 10);
     var marker = markers[markerIndex];
@@ -8723,10 +9137,30 @@ function bindInteractions(elements, markers, config) {
     }
   }, true);
 
-  // 鼠标离开标记项
-  elements.markersList.addEventListener('mouseleave', function (e) {
+  // 鼠标离开标记项（使用 mouseout 检查是否真正离开）
+  elements.markersList.addEventListener('mouseout', function (e) {
     var item = e.target.closest('.rich-diff-marker-item');
     if (!item) return;
+
+    // 检查鼠标是否移动到了 marker 项内部的其他子元素
+    // relatedTarget 是鼠标移动到的目标元素
+    var relatedTarget = e.relatedTarget;
+
+    // 如果 relatedTarget 仍然在当前 marker 项内，则不清除高亮
+    if (relatedTarget && item.contains(relatedTarget)) {
+      return;
+    }
+
+    // 如果 relatedTarget 是另一个 marker 项，也不清除（由 mouseenter 处理切换）
+    if (relatedTarget) {
+      var relatedItem = relatedTarget.closest('.rich-diff-marker-item');
+      if (relatedItem && relatedItem !== item) {
+        // 鼠标移动到另一个 marker 项，由那个项的 mouseenter 处理
+        return;
+      }
+    }
+
+    // 鼠标真正离开了 marker 列表区域
     clearHighlight(elements, state);
 
     // 隐藏弹窗
@@ -8744,31 +9178,119 @@ function highlightMarker(elements, markerItem, targetEl, state) {
   clearHighlight(elements, state);
   markerItem.classList.add('active');
   state.activeMarker = markerItem;
+  state.pendingTargetEl = targetEl;
   if (targetEl) {
     targetEl.classList.add('highlight');
 
-    // 创建连线
-    if (typeof window !== 'undefined' && window.LeaderLine) {
-      try {
-        var changeType = markerItem.classList.contains('add') ? 'add' : markerItem.classList.contains('del') ? 'del' : 'modify';
-        var color = changeType === 'add' ? '#1878E8' : changeType === 'del' ? '#D32F2F' : '#E65100';
-        state.currentConnector = createConnector(markerItem, targetEl, {
-          color: color,
-          size: 2,
-          path: 'fluid',
-          startPlug: 'disc',
-          endPlug: 'arrow2'
-        });
-      } catch (e) {
-        // 忽略连线创建错误
+    // 滚动右侧内容面板到目标元素
+    scrollContentToTarget(elements, targetEl, state, function () {
+      // 滚动结束后渲染连线
+      if (state.activeMarker === markerItem && state.pendingTargetEl === targetEl) {
+        renderLeaderLine(markerItem, targetEl, state);
       }
-    }
-
-    // 滚动到目标
-    targetEl.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center'
     });
+  }
+}
+
+/**
+ * 滚动内容面板到目标元素
+ */
+function scrollContentToTarget(elements, targetEl, state, callback) {
+  var contentPanel = elements.contentPanel;
+  if (!contentPanel) {
+    callback == null || callback();
+    return;
+  }
+
+  // 计算目标元素相对于内容面板的位置
+  var targetRect = targetEl.getBoundingClientRect();
+  var panelRect = contentPanel.getBoundingClientRect();
+
+  // 判断目标是否在可视区域内
+  var isFullyVisible = targetRect.top >= panelRect.top && targetRect.bottom <= panelRect.bottom;
+  if (isFullyVisible) {
+    // 已经在可视区域，直接渲染连线
+    callback == null || callback();
+    return;
+  }
+
+  // 标记正在滚动
+  state.isScrolling = true;
+
+  // 计算滚动位置
+  var targetTop = targetEl.offsetTop;
+  var panelHeight = contentPanel.clientHeight;
+  var targetHeight = targetEl.offsetHeight;
+
+  // 居中显示
+  var scrollTop = targetTop - panelHeight / 2 + targetHeight / 2;
+
+  // 监听滚动结束
+  var _onScrollEnd = function onScrollEnd() {
+    state.isScrolling = false;
+    contentPanel.removeEventListener('scrollend', _onScrollEnd);
+    callback == null || callback();
+  };
+
+  // 使用 scrollend 事件（现代浏览器支持）
+  if ('onscrollend' in contentPanel) {
+    contentPanel.addEventListener('scrollend', _onScrollEnd, {
+      once: true
+    });
+  } else {
+    // 降级：使用防抖
+    var scrollTimer = null;
+    var _onScroll = function onScroll() {
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(function () {
+        state.isScrolling = false;
+        contentPanel.removeEventListener('scroll', _onScroll);
+        callback == null || callback();
+      }, 150);
+    };
+    contentPanel.addEventListener('scroll', _onScroll, {
+      passive: true
+    });
+  }
+
+  // 执行滚动
+  contentPanel.scrollTo({
+    top: Math.max(0, scrollTop),
+    behavior: 'smooth'
+  });
+}
+
+/**
+ * 渲染 LeaderLine 连线
+ */
+function renderLeaderLine(markerItem, targetEl, state) {
+  // 如果正在滚动，跳过渲染
+  if (state.isScrolling) return;
+
+  // 清除旧连线
+  if (state.currentConnector) {
+    try {
+      state.currentConnector.line.remove();
+    } catch (e) {}
+    state.currentConnector = null;
+  }
+  clearConnectors();
+
+  // 创建新连线
+  if (typeof window !== 'undefined' && window.LeaderLine) {
+    try {
+      var changeType = markerItem.classList.contains('add') ? 'add' : markerItem.classList.contains('del') ? 'del' : 'modify';
+      var color = changeType === 'add' ? '#1878E8' : changeType === 'del' ? '#D32F2F' : '#E65100';
+      state.currentConnector = createConnector(markerItem, targetEl, {
+        color: color,
+        size: 2,
+        path: 'fluid',
+        startPlug: 'disc',
+        endPlug: 'arrow2'
+      });
+    } catch (e) {
+      // 忽略连线创建错误
+    }
   }
 }
 
@@ -8799,6 +9321,11 @@ function clearHighlight(elements, state) {
  * 销毁渲染器
  */
 function destroyRenderer(state, container) {
+  // 清理定时器
+  if (state.scrollTimeout) {
+    clearTimeout(state.scrollTimeout);
+    state.scrollTimeout = null;
+  }
   if (state.currentConnector) {
     try {
       state.currentConnector.line.remove();
@@ -8832,11 +9359,31 @@ function escapeHtml(str) {
 }
 
 /**
- * 截断文本
+ * 截断 HTML 内容（保留标签结构）
+ * @param {string} html - HTML 字符串
+ * @param {number} maxLen - 最大文本长度
+ * @returns {string}
  */
-function truncate(str, maxLen) {
-  if (!str || str.length <= maxLen) return str;
-  return str.substring(0, maxLen) + '...';
+function truncateHtml(html, maxLen) {
+  if (!html) return '';
+
+  // 创建临时容器解析 HTML
+  var temp = document.createElement('div');
+  temp.innerHTML = html;
+
+  // 获取纯文本内容
+  var text = temp.textContent || temp.innerText || '';
+
+  // 如果文本长度在限制内，直接返回原 HTML
+  if (text.length <= maxLen) {
+    return html;
+  }
+
+  // 截断文本并添加省略号
+  var truncatedText = text.substring(0, maxLen) + '...';
+
+  // 返回截断后的纯文本（保留差异标签样式）
+  return "<span>" + escapeHtml(truncatedText) + "</span>";
 }
 
 /**
@@ -8975,5 +9522,5 @@ var index$1 = {
   diffWithEngine: diffWithEngine
 };
 
-export { ChangeTypes, DefaultConfig, ErrorTypes, MediaTypes, cleanContent, clearConnectors, compareStyles, computeArticleDiff, createConnector, createConnectorFromMarker, createConnectors, createPopup, index$1 as default, defaultRenderer, detectChangeType, diffCustomField, diffCustomFields, diffDocFile, diffField, diffFixedFields, diffHTML, diffMediaList, diffPriority, diffStyle, diffText, diffWithEngine, extractDiffMarkers, extractMediaChanges$1 as extractMediaChanges, extractStyleElements, findElementById, generateMarkers, getAvailableEngines, getConnectorCount, getDiffRanges, getEngine, getEngineName, getRenderer, hasDiffMarkers, hasEngine, hasStyleDiff, isLeaderLineAvailable, matchElements, parseDocFile, parseStyle, removeConnector, render, resetAllCounters, setEngine, setRenderer, sortMarkers, updateAllConnectors, updateConnector };
+export { ChangeTypes, DefaultConfig, ErrorTypes, MediaTypes, cleanContent, clearConnectors, compareStyles, computeArticleDiff, createConnector, createConnectorFromMarker, createConnectors, createPopup, index$1 as default, defaultRenderer, detectChangeType, diffCustomField, diffCustomFields, diffDocFile, diffDynamicField, diffField, diffFixedFields, diffHTML, diffMediaList, diffPriority, diffStyle, diffText, diffWithEngine, extractDiffMarkers, extractMediaChanges$1 as extractMediaChanges, extractStyleElements, findElementById, generateMarkers, getAvailableEngines, getConnectorCount, getDiffRanges, getEngine, getEngineName, getRenderer, hasDiffMarkers, hasEngine, hasStyleDiff, isLeaderLineAvailable, matchElements, parseDocFile, parseStyle, removeConnector, render, resetAllCounters, setEngine, setRenderer, sortMarkers, updateAllConnectors, updateConnector };
 //# sourceMappingURL=rich-diff.dev.js.map

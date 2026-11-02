@@ -1,7 +1,7 @@
 /**
  * 工具层入口
  */
-import { diffField, diffPriority, diffFixedFields } from './field.js'
+import { diffField, diffPriority, diffFixedFields, diffDynamicField } from './field.js'
 import { diffMediaList, diffDocFile, parseDocFile, extractMediaChanges } from './media.js'
 import { diffCustomFields, diffCustomField } from './custom.js'
 import { diffHTML } from '../adapters/index.js'
@@ -10,6 +10,7 @@ export {
   diffField,
   diffPriority,
   diffFixedFields,
+  diffDynamicField,
   diffMediaList,
   diffDocFile,
   parseDocFile,

@@ -17,8 +17,8 @@ let markerStore = new Map()
 const DEFAULT_STYLES = `
   .rich-diff-container {
     display: flex;
-    height: 100%;
-    min-height: 400px;
+    height: 600px;
+    max-height: 80vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
     line-height: 1.6;
@@ -30,10 +30,15 @@ const DEFAULT_STYLES = `
   .rich-diff-markers-panel {
     width: 320px;
     min-width: 280px;
+    max-width: 400px;
+    height: 100%;
     background: #fff;
     border-right: 1px solid #e9ecef;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px;
+    box-sizing: border-box;
+    flex-shrink: 0;
   }
 
   .rich-diff-markers-panel h3 {
@@ -42,6 +47,10 @@ const DEFAULT_STYLES = `
     margin: 0 0 12px 0;
     padding-bottom: 8px;
     border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
   }
 
   .rich-diff-stats {
@@ -128,12 +137,20 @@ const DEFAULT_STYLES = `
   .rich-diff-marker-content .old { color: #D32F2F; }
   .rich-diff-marker-content .new { color: #1878E8; }
 
+  .rich-diff-marker-content .marker-prefix {
+    font-weight: bold;
+    font-family: monospace;
+  }
+
   /* 右侧内容面板 */
   .rich-diff-content-panel {
     flex: 1;
+    height: 100%;
     background: #fff;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 20px;
+    box-sizing: border-box;
   }
 
   .rich-diff-content-panel h3 {
@@ -142,11 +159,58 @@ const DEFAULT_STYLES = `
     margin: 0 0 12px 0;
     padding-bottom: 8px;
     border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
   }
 
   /* 表单布局 */
   .rich-diff-form {
     max-width: 800px;
+  }
+
+  /* 防止内容溢出 */
+  .rich-diff-form *,
+  .rich-diff-form *::before,
+  .rich-diff-form *::after {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* 图片/视频自适应 */
+  .rich-diff-form img,
+  .rich-diff-form video,
+  .rich-diff-form audio,
+  .rich-diff-form iframe,
+  .rich-diff-form embed,
+  .rich-diff-form object {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  /* 长文本/URL 自动换行 */
+  .rich-diff-form pre,
+  .rich-diff-form code,
+  .rich-diff-form a {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* 表格溢出处理 */
+  .rich-diff-form table {
+    width: 100%;
+    table-layout: fixed;
+    overflow-x: auto;
+    display: block;
+  }
+
+  /* 代码块横向滚动 */
+  .rich-diff-form pre {
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
 
   .rich-diff-field {
@@ -637,8 +701,9 @@ function renderMarkersList(listEl, markers) {
     const typeClass = marker.changeType || 'modify'
     const typeText = { add: '新增', del: '删除', modify: '修改' }[typeClass] || typeClass
 
-    const oldText = escapeHtml(marker.oldValue || '')
-    const newText = escapeHtml(marker.newValue || '')
+    // 渲染 HTML 内容而非源代码
+    const oldContent = marker.oldValue || ''
+    const newContent = marker.newValue || ''
 
     return `
       <div class="rich-diff-marker-item ${typeClass}" data-marker-index="${index}" data-marker-id="${marker.id}" data-marker-field="${marker.field}">
@@ -647,8 +712,8 @@ function renderMarkersList(listEl, markers) {
           <span class="rich-diff-marker-field">${marker.fieldLabel || marker.field}</span>
         </div>
         <div class="rich-diff-marker-content">
-          ${oldText ? `<div class="old">- ${truncate(oldText, 60)}</div>` : ''}
-          ${newText ? `<div class="new">+ ${truncate(newText, 60)}</div>` : ''}
+          ${oldContent ? `<div class="old"><span class="marker-prefix">- </span>${truncateHtml(oldContent, 60)}</div>` : ''}
+          ${newContent ? `<div class="new"><span class="marker-prefix">+ </span>${truncateHtml(newContent, 60)}</div>` : ''}
         </div>
       </div>
     `
@@ -717,15 +782,47 @@ function renderUI(container, result, markers, fieldName, config) {
 function bindInteractions(elements, markers, config = {}) {
   const state = {
     currentConnector: null,
-    activeMarker: null
+    activeMarker: null,
+    pendingTargetEl: null,
+    scrollTimeout: null,
+    isScrolling: false
   }
 
   const { detectStyle = false } = config
+
+  // 滚动监听（只监听右侧内容面板）
+  const handleContentScroll = () => {
+    // 滚动时清除连线
+    if (state.currentConnector) {
+      try {
+        state.currentConnector.line.remove()
+      } catch (e) {}
+      state.currentConnector = null
+    }
+    clearConnectors()
+
+    // 标记滚动状态
+    state.isScrolling = true
+
+    // 防抖：滚动结束后重置状态
+    if (state.scrollTimeout) {
+      clearTimeout(state.scrollTimeout)
+    }
+    state.scrollTimeout = setTimeout(() => {
+      state.isScrolling = false
+    }, 150)
+  }
+
+  // 只监听右侧内容面板的滚动
+  elements.contentPanel?.addEventListener('scroll', handleContentScroll, { passive: true })
 
   // 鼠标进入标记项
   elements.markersList.addEventListener('mouseenter', (e) => {
     const item = e.target.closest('.rich-diff-marker-item')
     if (!item) return
+
+    // 如果已经激活了同一个 marker，跳过
+    if (state.activeMarker === item) return
 
     const markerId = item.dataset.markerId
     const markerIndex = parseInt(item.dataset.markerIndex, 10)
@@ -758,10 +855,30 @@ function bindInteractions(elements, markers, config = {}) {
     }
   }, true)
 
-  // 鼠标离开标记项
-  elements.markersList.addEventListener('mouseleave', (e) => {
+  // 鼠标离开标记项（使用 mouseout 检查是否真正离开）
+  elements.markersList.addEventListener('mouseout', (e) => {
     const item = e.target.closest('.rich-diff-marker-item')
     if (!item) return
+
+    // 检查鼠标是否移动到了 marker 项内部的其他子元素
+    // relatedTarget 是鼠标移动到的目标元素
+    const relatedTarget = e.relatedTarget
+
+    // 如果 relatedTarget 仍然在当前 marker 项内，则不清除高亮
+    if (relatedTarget && item.contains(relatedTarget)) {
+      return
+    }
+
+    // 如果 relatedTarget 是另一个 marker 项，也不清除（由 mouseenter 处理切换）
+    if (relatedTarget) {
+      const relatedItem = relatedTarget.closest('.rich-diff-marker-item')
+      if (relatedItem && relatedItem !== item) {
+        // 鼠标移动到另一个 marker 项，由那个项的 mouseenter 处理
+        return
+      }
+    }
+
+    // 鼠标真正离开了 marker 列表区域
     clearHighlight(elements, state)
 
     // 隐藏弹窗
@@ -781,33 +898,124 @@ function highlightMarker(elements, markerItem, targetEl, state) {
 
   markerItem.classList.add('active')
   state.activeMarker = markerItem
+  state.pendingTargetEl = targetEl
 
   if (targetEl) {
     targetEl.classList.add('highlight')
 
-    // 创建连线
-    if (typeof window !== 'undefined' && window.LeaderLine) {
-      try {
-        const changeType = markerItem.classList.contains('add') ? 'add' :
-                          markerItem.classList.contains('del') ? 'del' : 'modify'
-
-        const color = changeType === 'add' ? '#1878E8' :
-                     changeType === 'del' ? '#D32F2F' : '#E65100'
-
-        state.currentConnector = createConnector(markerItem, targetEl, {
-          color,
-          size: 2,
-          path: 'fluid',
-          startPlug: 'disc',
-          endPlug: 'arrow2'
-        })
-      } catch (e) {
-        // 忽略连线创建错误
+    // 滚动右侧内容面板到目标元素
+    scrollContentToTarget(elements, targetEl, state, () => {
+      // 滚动结束后渲染连线
+      if (state.activeMarker === markerItem && state.pendingTargetEl === targetEl) {
+        renderLeaderLine(markerItem, targetEl, state)
       }
-    }
+    })
+  }
+}
 
-    // 滚动到目标
-    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+/**
+ * 滚动内容面板到目标元素
+ */
+function scrollContentToTarget(elements, targetEl, state, callback) {
+  const contentPanel = elements.contentPanel
+  if (!contentPanel) {
+    callback?.()
+    return
+  }
+
+  // 计算目标元素相对于内容面板的位置
+  const targetRect = targetEl.getBoundingClientRect()
+  const panelRect = contentPanel.getBoundingClientRect()
+
+  // 判断目标是否在可视区域内
+  const isFullyVisible = (
+    targetRect.top >= panelRect.top &&
+    targetRect.bottom <= panelRect.bottom
+  )
+
+  if (isFullyVisible) {
+    // 已经在可视区域，直接渲染连线
+    callback?.()
+    return
+  }
+
+  // 标记正在滚动
+  state.isScrolling = true
+
+  // 计算滚动位置
+  const targetTop = targetEl.offsetTop
+  const panelHeight = contentPanel.clientHeight
+  const targetHeight = targetEl.offsetHeight
+
+  // 居中显示
+  const scrollTop = targetTop - (panelHeight / 2) + (targetHeight / 2)
+
+  // 监听滚动结束
+  const onScrollEnd = () => {
+    state.isScrolling = false
+    contentPanel.removeEventListener('scrollend', onScrollEnd)
+    callback?.()
+  }
+
+  // 使用 scrollend 事件（现代浏览器支持）
+  if ('onscrollend' in contentPanel) {
+    contentPanel.addEventListener('scrollend', onScrollEnd, { once: true })
+  } else {
+    // 降级：使用防抖
+    let scrollTimer = null
+    const onScroll = () => {
+      if (scrollTimer) clearTimeout(scrollTimer)
+      scrollTimer = setTimeout(() => {
+        state.isScrolling = false
+        contentPanel.removeEventListener('scroll', onScroll)
+        callback?.()
+      }, 150)
+    }
+    contentPanel.addEventListener('scroll', onScroll, { passive: true })
+  }
+
+  // 执行滚动
+  contentPanel.scrollTo({
+    top: Math.max(0, scrollTop),
+    behavior: 'smooth'
+  })
+}
+
+/**
+ * 渲染 LeaderLine 连线
+ */
+function renderLeaderLine(markerItem, targetEl, state) {
+  // 如果正在滚动，跳过渲染
+  if (state.isScrolling) return
+
+  // 清除旧连线
+  if (state.currentConnector) {
+    try {
+      state.currentConnector.line.remove()
+    } catch (e) {}
+    state.currentConnector = null
+  }
+  clearConnectors()
+
+  // 创建新连线
+  if (typeof window !== 'undefined' && window.LeaderLine) {
+    try {
+      const changeType = markerItem.classList.contains('add') ? 'add' :
+                        markerItem.classList.contains('del') ? 'del' : 'modify'
+
+      const color = changeType === 'add' ? '#1878E8' :
+                   changeType === 'del' ? '#D32F2F' : '#E65100'
+
+      state.currentConnector = createConnector(markerItem, targetEl, {
+        color,
+        size: 2,
+        path: 'fluid',
+        startPlug: 'disc',
+        endPlug: 'arrow2'
+      })
+    } catch (e) {
+      // 忽略连线创建错误
+    }
   }
 }
 
@@ -841,6 +1049,12 @@ function clearHighlight(elements, state) {
  * 销毁渲染器
  */
 function destroyRenderer(state, container) {
+  // 清理定时器
+  if (state.scrollTimeout) {
+    clearTimeout(state.scrollTimeout)
+    state.scrollTimeout = null
+  }
+
   if (state.currentConnector) {
     try {
       state.currentConnector.line.remove()
@@ -884,6 +1098,34 @@ function escapeHtml(str) {
 function truncate(str, maxLen) {
   if (!str || str.length <= maxLen) return str
   return str.substring(0, maxLen) + '...'
+}
+
+/**
+ * 截断 HTML 内容（保留标签结构）
+ * @param {string} html - HTML 字符串
+ * @param {number} maxLen - 最大文本长度
+ * @returns {string}
+ */
+function truncateHtml(html, maxLen) {
+  if (!html) return ''
+
+  // 创建临时容器解析 HTML
+  const temp = document.createElement('div')
+  temp.innerHTML = html
+
+  // 获取纯文本内容
+  const text = temp.textContent || temp.innerText || ''
+
+  // 如果文本长度在限制内，直接返回原 HTML
+  if (text.length <= maxLen) {
+    return html
+  }
+
+  // 截断文本并添加省略号
+  const truncatedText = text.substring(0, maxLen) + '...'
+
+  // 返回截断后的纯文本（保留差异标签样式）
+  return `<span>${escapeHtml(truncatedText)}</span>`
 }
 
 export default defaultRenderer

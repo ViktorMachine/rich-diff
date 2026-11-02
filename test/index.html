@@ -21,15 +21,6 @@
     .summary .fail-count { color: #f44336; }
   </style>
 
-  <!-- 通过 CDN 加载依赖 -->
-  <script src="https://unpkg.com/htmldiff-js@1.0.5/dist/htmldiff.min.js"></script>
-  <script type="importmap">
-  {
-    "imports": {
-      "diff-dom": "https://esm.sh/diff-dom@5.2.1"
-    }
-  }
-  </script>
 </head>
 <body>
   <h1>rich-diff 功能测试</h1>
@@ -59,12 +50,15 @@
   <h2>7. 输出格式验证</h2>
   <div id="formatTests"></div>
 
-  <script type="module">
-    // 将 htmldiff-js 挂载到 window 以便模块可以访问
-    window.HtmlDiff = window.HtmlDiff || HtmlDiff;
+  <h2>8. 动态字段对比测试 (type: dynamic)</h2>
+  <div id="dynamicFieldTests"></div>
 
+  <h2>9. 资源字段对比测试 (type: file/image/video)</h2>
+  <div id="resourceFieldTests"></div>
+
+  <script type="module">
     // 导入 rich-diff 模块
-    import * as RichDiff from '/src/index.js'
+    import * as RichDiff from '../dist/rich-diff.dev.js'
 
     // 测试结果收集
     const testResults = { pass: 0, fail: 0, tests: [] }
@@ -381,6 +375,183 @@
         `add: ${addOnly}, del: ${delOnly}, modify: ${modify}`)
     }
 
+    // ===== 8. 动态字段对比测试 =====
+    function testDynamicField() {
+      // 测试基本动态字段对比
+      const oldVal = [
+        { label: '姓名', value: '张三', sort: 1 },
+        { label: '年龄', value: '25', sort: 2 }
+      ]
+      const newVal = [
+        { label: '姓名', value: '李四', sort: 1 },
+        { label: '年龄', value: '25', sort: 2 },
+        { label: '城市', value: '北京', sort: 3 }
+      ]
+
+      const result1 = RichDiff.diffField(oldVal, newVal, 'userInfo', { type: 'dynamic' })
+
+      const hasHtml = Array.isArray(result1.html)
+      const hasDiff = result1.hasDiff === true
+
+      log('diffField (dynamic) - 基本对比', hasHtml, `返回数组长度: ${result1.html.length}`)
+      renderTest('dynamicFieldTests', '基本对比', hasHtml, `返回 ${result1.html.length} 项`)
+
+      log('diffField (dynamic) - 检测到差异', hasDiff, `hasDiff: ${result1.hasDiff}`)
+      renderTest('dynamicFieldTests', '检测到差异', hasDiff, `hasDiff: ${result1.hasDiff}`)
+
+      // 验证变更类型
+      const nameItem = result1.html.find(item => item.label === '姓名')
+      const cityItem = result1.html.find(item => item.label === '城市')
+
+      const nameChanged = nameItem && nameItem.diffType === 'change'
+      const cityAdded = cityItem && cityItem.diffType === 'add'
+
+      log('diffField (dynamic) - 值变更检测', nameChanged, nameItem ? `姓名: ${nameItem.diffType}` : '未找到')
+      renderTest('dynamicFieldTests', '值变更检测', nameChanged,
+        nameItem ? `姓名 diffType: ${nameItem.diffType}` : '未找到')
+
+      log('diffField (dynamic) - 新增项检测', cityAdded, cityItem ? `城市: ${cityItem.diffType}` : '未找到')
+      renderTest('dynamicFieldTests', '新增项检测', cityAdded,
+        cityItem ? `城市 diffType: ${cityItem.diffType}` : '未找到')
+
+      // 测试删除项
+      const oldVal2 = [
+        { label: '姓名', value: '张三', sort: 1 },
+        { label: '年龄', value: '25', sort: 2 }
+      ]
+      const newVal2 = [
+        { label: '姓名', value: '张三', sort: 1 }
+      ]
+
+      const result2 = RichDiff.diffField(oldVal2, newVal2, 'userInfo', { type: 'dynamic' })
+      const ageItem = result2.html.find(item => item.label === '年龄')
+      const ageDeleted = ageItem && ageItem.diffType === 'del'
+
+      log('diffField (dynamic) - 删除项检测', ageDeleted, ageItem ? `年龄: ${ageItem.diffType}` : '未找到')
+      renderTest('dynamicFieldTests', '删除项检测', ageDeleted,
+        ageItem ? `年龄 diffType: ${ageItem.diffType}, diffHtml: ${ageItem.diffHtml}` : '未找到')
+
+      // 测试相同数据
+      const sameData = [
+        { label: '姓名', value: '张三', sort: 1 }
+      ]
+      const result3 = RichDiff.diffField(sameData, sameData, 'userInfo', { type: 'dynamic' })
+      const noDiff = result3.hasDiff === false && Array.isArray(result3.html)
+
+      log('diffField (dynamic) - 相同数据无差异', noDiff, `hasDiff: ${result3.hasDiff}`)
+      renderTest('dynamicFieldTests', '相同数据无差异', noDiff, `hasDiff: ${result3.hasDiff}, html: ${JSON.stringify(result3.html)}`)
+
+      // 测试 JSON 字符串输入
+      const jsonStr = JSON.stringify([
+        { label: '姓名', value: '张三', sort: 1 }
+      ])
+      const result4 = RichDiff.diffField(jsonStr, [{ label: '姓名', value: '李四', sort: 1 }], 'userInfo', { type: 'dynamic' })
+      const jsonWorks = result4.hasDiff === true
+
+      log('diffField (dynamic) - JSON 字符串输入', jsonWorks, `hasDiff: ${result4.hasDiff}`)
+      renderTest('dynamicFieldTests', 'JSON 字符串输入', jsonWorks,
+        `从 JSON 字符串解析并对比, hasDiff: ${result4.hasDiff}`)
+
+      // 测试 diffDynamicField 独立函数
+      const result5 = RichDiff.diffDynamicField(
+        [{ label: '标签', value: '旧值' }],
+        [{ label: '标签', value: '新值' }],
+        'testField'
+      )
+      const directCall = result5.hasDiff === true && result5.html[0].diffType === 'change'
+
+      log('diffDynamicField - 独立调用', directCall, `hasDiff: ${result5.hasDiff}`)
+      renderTest('dynamicFieldTests', 'diffDynamicField 独立调用', directCall,
+        `结果: ${JSON.stringify(result5.html[0], null, 2)}`)
+    }
+
+    // ===== 9. 资源字段对比测试 =====
+    function testResourceField() {
+      // 测试单个图片资源
+      const oldImage = 'https://example.com/old-image.jpg'
+      const newImage = 'https://example.com/new-image.jpg'
+
+      const result1 = RichDiff.diffField(oldImage, newImage, 'cover', { type: 'image' })
+      const imageDiff = result1.hasDiff === true && result1.resourceType === 'image'
+
+      log('diffField (image) - 图片变更', imageDiff, `hasDiff: ${result1.hasDiff}`)
+      renderTest('resourceFieldTests', '图片变更', imageDiff,
+        `old: ${result1.oldResource?.url}, new: ${result1.newResource?.url}`)
+
+      // 测试新增图片
+      const result2 = RichDiff.diffField('', newImage, 'avatar', { type: 'image' })
+      const imageAdd = result2.hasDiff === true && result2.newResource?.diffType === 'add'
+
+      log('diffField (image) - 新增图片', imageAdd, `diffType: ${result2.newResource?.diffType}`)
+      renderTest('resourceFieldTests', '新增图片', imageAdd, `url: ${result2.newResource?.url}`)
+
+      // 测试删除图片
+      const result3 = RichDiff.diffField(oldImage, '', 'banner', { type: 'image' })
+      const imageDel = result3.hasDiff === true && result3.oldResource?.diffType === 'del'
+
+      log('diffField (image) - 删除图片', imageDel, `diffType: ${result3.oldResource?.diffType}`)
+      renderTest('resourceFieldTests', '删除图片', imageDel, `url: ${result3.oldResource?.url}`)
+
+      // 测试图片数组
+      const oldImages = ['img1.jpg', 'img2.jpg', 'img3.jpg']
+      const newImages = ['img1.jpg', 'img4.jpg', 'img3.jpg']
+
+      const result4 = RichDiff.diffField(oldImages, newImages, 'gallery', { type: 'images' })
+      const imagesDiff = result4.hasDiff === true && result4.resourceType === 'images'
+
+      log('diffField (images) - 图片数组变更', imagesDiff, `hasDiff: ${result4.hasDiff}`)
+      renderTest('resourceFieldTests', '图片数组变更', imagesDiff,
+        `old: ${result4.oldResources?.length}, new: ${result4.newResources?.length}`)
+
+      // 检查数组项差异
+      const added = result4.html.filter(i => i.diffType === 'add')
+      const deleted = result4.html.filter(i => i.diffType === 'del')
+      const same = result4.html.filter(i => i.diffType === 'same')
+
+      log('diffField (images) - 数组项统计', added.length === 1 && deleted.length === 1 && same.length === 2,
+        `新增: ${added.length}, 删除: ${deleted.length}, 相同: ${same.length}`)
+      renderTest('resourceFieldTests', '数组项统计', added.length === 1 && deleted.length === 1,
+        `新增: ${added.map(i => i.url).join(', ')}, 删除: ${deleted.map(i => i.url).join(', ')}`)
+
+      // 测试单个视频
+      const oldVideo = 'https://example.com/old-video.mp4'
+      const newVideo = 'https://example.com/new-video.mp4'
+
+      const result5 = RichDiff.diffField(oldVideo, newVideo, 'trailer', { type: 'video' })
+      const videoDiff = result5.hasDiff === true && result5.resourceType === 'video'
+
+      log('diffField (video) - 视频变更', videoDiff, `hasDiff: ${result5.hasDiff}`)
+      renderTest('resourceFieldTests', '视频变更', videoDiff,
+        `old: ${result5.oldResource?.url}, new: ${result5.newResource?.url}`)
+
+      // 测试文件
+      const oldFile = 'https://example.com/old-doc.pdf'
+      const newFile = 'https://example.com/new-doc.pdf'
+
+      const result6 = RichDiff.diffField(oldFile, newFile, 'attachment', { type: 'file' })
+      const fileDiff = result6.hasDiff === true && result6.resourceType === 'file'
+
+      log('diffField (file) - 文件变更', fileDiff, `hasDiff: ${result6.hasDiff}`)
+      renderTest('resourceFieldTests', '文件变更', fileDiff,
+        `old: ${result6.oldResource?.url}, new: ${result6.newResource?.url}`)
+
+      // 测试相同资源无差异
+      const result7 = RichDiff.diffField(newImage, newImage, 'sameImage', { type: 'image' })
+      const noDiff = result7.hasDiff === false
+
+      log('diffField (image) - 相同图片无差异', noDiff, `hasDiff: ${result7.hasDiff}`)
+      renderTest('resourceFieldTests', '相同图片无差异', noDiff, `url: ${result7.html}`)
+
+      // 测试 JSON 字符串输入的图片数组
+      const jsonImages = JSON.stringify(['a.jpg', 'b.jpg'])
+      const result8 = RichDiff.diffField(jsonImages, ['a.jpg', 'c.jpg'], 'jsonImages', { type: 'images' })
+      const jsonWorks = result8.hasDiff === true
+
+      log('diffField (images) - JSON 字符串输入', jsonWorks, `hasDiff: ${result8.hasDiff}`)
+      renderTest('resourceFieldTests', 'JSON 字符串输入', jsonWorks,
+        `解析并对比成功, hasDiff: ${result8.hasDiff}`)
+    }
+
     // ===== 运行所有测试 =====
     function runAllTests() {
       testModuleImports()
@@ -390,6 +561,8 @@
       testGenerateMarkers()
       testDiffMediaList()
       testOutputFormat()
+      testDynamicField()
+      testResourceField()
 
       // 更新摘要
       const summary = document.getElementById('summary')
