@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>styleParser 测试</title>
+</head>
+<body>
+  <h1>styleParser 测试</h1>
+  <pre id="results"></pre>
+  <script type="module">
+    import { parseStyle, compareStyles } from '../../src/utils/styleParser.js'
+
+    // 简单测试框架
+    let passed = 0
+    let failed = 0
+    const results = []
+
+    function test(name, fn) {
+      try {
+        fn()
+        results.push(`✓ ${name}`)
+        passed++
+      } catch (e) {
+        results.push(`✗ ${name}: ${e.message}`)
+        failed++
+      }
+    }
+
+    function expect(actual) {
+      return {
+        toEqual(expected) {
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
+          }
+        }
+      }
+    }
+
+    // parseStyle 测试
+    test('parseStyle: 标准样式字符串', () => {
+      const result = parseStyle('color: red; font-size: 14px')
+      expect(result).toEqual({ color: 'red', 'font-size': '14px' })
+    })
+
+    test('parseStyle: 处理多余空格', () => {
+      const result = parseStyle('  color :  red  ;  font-size:14px  ')
+      expect(result).toEqual({ color: 'red', 'font-size': '14px' })
+    })
+
+    test('parseStyle: 空输入', () => {
+      expect(parseStyle('')).toEqual({})
+      expect(parseStyle(null)).toEqual({})
+    })
+
+    // compareStyles 测试
+    test('compareStyles: 新增属性', () => {
+      const result = compareStyles({ color: 'red' }, { color: 'red', 'font-size': '14px' })
+      expect(result.added).toEqual([{ property: 'font-size', value: '14px' }])
+    })
+
+    test('compareStyles: 删除属性', () => {
+      const result = compareStyles({ color: 'red', 'font-size': '14px' }, { color: 'red' })
+      expect(result.removed).toEqual([{ property: 'font-size', value: '14px' }])
+    })
+
+    test('compareStyles: 修改属性', () => {
+      const result = compareStyles({ color: 'red' }, { color: 'blue' })
+      expect(result.changed).toEqual([{ property: 'color', oldValue: 'red', newValue: 'blue' }])
+    })
+
+    test('compareStyles: 复杂场景', () => {
+      const result = compareStyles(
+        { color: 'red', 'font-size': '14px', margin: '10px' },
+        { color: 'blue', 'font-size': '14px', padding: '5px' }
+      )
+      expect(result.added).toEqual([{ property: 'padding', value: '5px' }])
+      expect(result.removed).toEqual([{ property: 'margin', value: '10px' }])
+      expect(result.changed).toEqual([{ property: 'color', oldValue: 'red', newValue: 'blue' }])
+    })
+
+    // 输出结果
+    document.getElementById('results').textContent = results.join('\n') + `\n\n测试结果: ${passed} 通过, ${failed} 失败`
+    console.log(`\n测试结果: ${passed} 通过, ${failed} 失败`)
+  </script>
+</body>
+</html>
