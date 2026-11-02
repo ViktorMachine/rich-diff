@@ -1,4 +1,4 @@
-# rich-diff
+# gpower-rich-diff
 
 可扩展的富文本对比框架，支持 HTML、文本、媒体资源的差异对比与可视化。
 
@@ -14,7 +14,7 @@
 ## 安装
 
 ```bash
-npm install rich-diff
+npm install gpower-rich-diff
 ```
 
 ## 使用方式
@@ -27,11 +27,11 @@ npm install rich-diff
 
 ```javascript
 // 使用打包工具（Webpack/Vite 等）
-import { render, diffHTML, diffText } from 'rich-diff'
+import { render, diffHTML, diffText } from 'gpower-rich-diff'
 
 // 浏览器原生模块
 <script type="module">
-  import { render } from './node_modules/rich-diff/dist/rich-diff.esm.js'
+  import { render } from './node_modules/gpower-rich-diff/dist/rich-diff.esm.js'
   render({ ... })
 </script>
 ```
@@ -49,7 +49,7 @@ import { render, diffHTML, diffText } from 'rich-diff'
 
 ```html
 <!-- 直接引入 UMD 文件 -->
-<script src="./node_modules/rich-diff/dist/rich-diff.umd.js"></script>
+<script src="./node_modules/gpower-rich-diff/dist/rich-diff.umd.js"></script>
 <script>
   // 全局变量 RichDiff
   const result = RichDiff.render({ ... })
@@ -67,14 +67,14 @@ import { render, diffHTML, diffText } from 'rich-diff'
 
 ```html
 <!-- 使用 unpkg CDN -->
-<script src="https://unpkg.com/rich-diff/dist/rich-diff.umd.js"></script>
+<script src="https://unpkg.com/gpower-rich-diff/dist/rich-diff.umd.js"></script>
 <script>
   const result = RichDiff.render({ ... })
 </script>
 
 <!-- 或使用 ESM 模块 -->
 <script type="module">
-  import { render } from 'https://unpkg.com/rich-diff/dist/rich-diff.esm.js'
+  import { render } from 'https://unpkg.com/gpower-rich-diff/dist/rich-diff.esm.js'
   render({ ... })
 </script>
 ```
@@ -88,7 +88,7 @@ import { render, diffHTML, diffText } from 'rich-diff'
 3. **调试版本**：开发时可使用 `dist/rich-diff.dev.js`（未压缩，保留调试信息）：
 
    ```javascript
-   import { render } from 'rich-diff/dist/rich-diff.dev.js'
+   import { render } from 'gpower-rich-diff/dist/rich-diff.dev.js'
    ```
 
 ## 快速开始
@@ -96,7 +96,7 @@ import { render, diffHTML, diffText } from 'rich-diff'
 ### 纯文本对比
 
 ```javascript
-import { diffText } from 'rich-diff'
+import { diffText } from 'gpower-rich-diff'
 
 const result = diffText('旧标题', '新标题', 'title')
 console.log(result.html)  // '<del>旧</del><ins>新</ins>标题'
@@ -107,7 +107,7 @@ console.log(result.markers)  // []
 ### HTML/富文本对比
 
 ```javascript
-import { diffHTML } from 'rich-diff'
+import { diffHTML } from 'gpower-rich-diff'
 
 const oldHtml = '<p>这是<strong>旧内容</strong></p>'
 const newHtml = '<p>这是<em>新内容</em></p>'
@@ -119,7 +119,7 @@ console.log(result.html)
 ### 媒体资源对比
 
 ```javascript
-import { diffMediaList } from 'rich-diff'
+import { diffMediaList } from 'gpower-rich-diff'
 
 const oldMedia = [
   { fileValue: 'img1.jpg', title: '图片1' },
@@ -142,7 +142,7 @@ newList.forEach(item => {
 ### 使用渲染器
 
 ```javascript
-import { render } from 'rich-diff'
+import { render } from 'gpower-rich-diff'
 
 // 方式一：多字段对比（推荐）
 // 传入数据对象和字段配置，自动渲染表单布局
@@ -198,7 +198,7 @@ const rawData = render({
 ### 提取变更标记
 
 ```javascript
-import { diffHTML, generateMarkers } from 'rich-diff'
+import { diffHTML, generateMarkers } from 'gpower-rich-diff'
 
 const result = diffHTML(oldHtml, newHtml, 'content')
 
@@ -219,7 +219,7 @@ markers.forEach(marker => {
 ### LeaderLine 连线
 
 ```javascript
-import { createConnector, clearConnectors } from 'rich-diff'
+import { createConnector, clearConnectors } from 'gpower-rich-diff'
 
 // 创建连线
 const connector = createConnector(startElement, endElement, {
@@ -274,7 +274,7 @@ clearConnectors()
 ## 自定义渲染器
 
 ```javascript
-import { setRenderer } from 'rich-diff'
+import { setRenderer } from 'gpower-rich-diff'
 
 const myRenderer = {
   render({ container, oldContent, newContent, diffResult, config }) {
@@ -292,7 +292,7 @@ setRenderer(myRenderer)
 ### 基本用法
 
 ```javascript
-import { diffStyle } from 'rich-diff'
+import { diffStyle } from 'gpower-rich-diff'
 
 const oldHtml = '<p style="color:red;font-size:14px">内容</p>'
 const newHtml = '<p style="color:blue;font-size:16px">内容</p>'
@@ -305,7 +305,7 @@ console.log(result.styleChanges)  // [...]
 ### 结合 render 使用
 
 ```javascript
-import { render } from 'rich-diff'
+import { render } from 'gpower-rich-diff'
 
 render({
   container: document.getElementById('diffContainer'),
@@ -349,7 +349,7 @@ render({
 ## 自定义对比引擎
 
 ```javascript
-import { setEngine } from 'rich-diff'
+import { setEngine } from 'gpower-rich-diff'
 
 // 使用内置引擎
 setEngine('htmldiff')  // 默认，基于 htmldiff-js

@@ -49,7 +49,7 @@ const pkgPath = path.join(__dirname, '..', 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 
 const checks = [
-  { name: 'name', value: pkg.name === 'rich-diff' },
+  { name: 'name', value: pkg.name === 'gpower-rich-diff' },
   { name: 'main', value: pkg.main === 'src/index.js' },
   { name: 'type: module', value: pkg.type === 'module' },
   { name: 'exports', value: !!pkg.exports },
