@@ -3587,6 +3587,467 @@ function getFirstDiffRange(html) {
 }
 
 /**
+ * CSS 样式解析工具
+ * 用于解析和对比内联样式
+ */
+
+/**
+ * 解析样式字符串为键值对对象
+ * @param {string} styleString - 样式字符串，如 'color: red; font-size: 14px'
+ * @returns {Object} 键值对对象 { color: 'red', 'font-size': '14px' }
+ */
+function parseStyle(styleString) {
+  if (!styleString || typeof styleString !== 'string') {
+    return {}
+  }
+
+  const result = {};
+  const declarations = styleString.split(';');
+
+  for (const declaration of declarations) {
+    const trimmed = declaration.trim();
+    if (!trimmed) continue
+
+    // 处理带引号的值（可能包含分号）
+    const colonIndex = trimmed.indexOf(':');
+    if (colonIndex === -1) continue
+
+    const property = trimmed.substring(0, colonIndex).trim().toLowerCase();
+    const value = trimmed.substring(colonIndex + 1).trim();
+
+    if (property && value) {
+      result[property] = value;
+    }
+  }
+
+  return result
+}
+
+/**
+ * 对比两个样式对象，生成差异详情
+ * @param {Object} oldStyle - 旧样式对象
+ * @param {Object} newStyle - 新样式对象
+ * @returns {Object} { added, removed, changed }
+ */
+function compareStyles(oldStyle = {}, newStyle = {}) {
+  const added = [];
+  const removed = [];
+  const changed = [];
+
+  const oldKeys = Object.keys(oldStyle);
+  const newKeys = Object.keys(newStyle);
+
+  // 检查新增和修改
+  for (const key of newKeys) {
+    if (!(key in oldStyle)) {
+      added.push({ property: key, value: newStyle[key] });
+    } else if (oldStyle[key] !== newStyle[key]) {
+      changed.push({
+        property: key,
+        oldValue: oldStyle[key],
+        newValue: newStyle[key]
+      });
+    }
+  }
+
+  // 检查删除
+  for (const key of oldKeys) {
+    if (!(key in newStyle)) {
+      removed.push({ property: key, value: oldStyle[key] });
+    }
+  }
+
+  return { added, removed, changed }
+}
+
+/**
+ * 判断是否有样式差异
+ * @param {Object} diffResult - compareStyles 的返回值
+ * @returns {boolean}
+ */
+function hasStyleDiff(diffResult) {
+  return diffResult.added.length > 0 ||
+         diffResult.removed.length > 0 ||
+         diffResult.changed.length > 0
+}
+
+/**
+ * 样式对比核心模块
+ * 负责提取 HTML 元素中的内联样式并进行对比
+ */
+
+/**
+ * 从 HTML 字符串中提取带 style 属性的元素
+ * @param {string} html - HTML 字符串
+ * @returns {Array} 元素列表 [{ id, path, tagName, style, outerHTML, innerHTML }]
+ */
+function extractStyleElements(html) {
+  if (!html || typeof html !== 'string') {
+    return []
+  }
+
+  const elements = [];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  const allElements = doc.querySelectorAll('[style]');
+
+  allElements.forEach((element, index) => {
+    elements.push({
+      id: element.id || null,
+      path: getElementPath(element),
+      tagName: element.tagName.toLowerCase(),
+      style: element.getAttribute('style'),
+      outerHTML: element.outerHTML,
+      innerHTML: element.innerHTML
+    });
+  });
+
+  return elements
+}
+
+/**
+ * 获取元素的 DOM 路径
+ * @param {Element} element - DOM 元素
+ * @returns {string} 路径字符串，如 'div > p:nth-child(2)'
+ */
+function getElementPath(element) {
+  const path = [];
+  let current = element;
+
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let selector = current.tagName.toLowerCase();
+
+    if (current.id) {
+      selector += `#${current.id}`;
+      path.unshift(selector);
+      break
+    }
+
+    const parent = current.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.children).filter(
+        child => child.tagName === current.tagName
+      );
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(current) + 1;
+        selector += `:nth-child(${index})`;
+      }
+    }
+
+    path.unshift(selector);
+    current = parent;
+  }
+
+  return path.join(' > ')
+}
+
+/**
+ * 匹配新旧元素对
+ * @param {Array} oldElements - 旧元素列表
+ * @param {Array} newElements - 新元素列表
+ * @param {string} strategy - 匹配策略 'id' | 'path' | 'auto'
+ * @returns {Array} 匹配结果 [{ oldElement, newElement }]
+ */
+function matchElements(oldElements, newElements, strategy = 'auto') {
+  const matches = [];
+  const matchedOld = new Set();
+  const matchedNew = new Set();
+
+  // 策略函数列表
+  const strategies = strategy === 'auto'
+    ? [matchById, matchByPath, matchBySimilarity]
+    : strategy === 'id'
+    ? [matchById]
+    : strategy === 'path'
+    ? [matchByPath]
+    : [matchById, matchByPath];
+
+  for (const matchFn of strategies) {
+    for (const oldEl of oldElements) {
+      if (matchedOld.has(oldEl)) continue
+
+      for (const newEl of newElements) {
+        if (matchedNew.has(newEl)) continue
+
+        if (matchFn(oldEl, newEl)) {
+          matches.push({ oldElement: oldEl, newElement: newEl });
+          matchedOld.add(oldEl);
+          matchedNew.add(newEl);
+          break
+        }
+      }
+    }
+  }
+
+  return matches
+}
+
+/**
+ * 通过 ID 匹配
+ */
+function matchById(oldEl, newEl) {
+  return oldEl.id && newEl.id && oldEl.id === newEl.id
+}
+
+/**
+ * 通过路径匹配
+ */
+function matchByPath(oldEl, newEl) {
+  return oldEl.path === newEl.path
+}
+
+/**
+ * 通过内容相似度匹配（阈值 80%）
+ */
+function matchBySimilarity(oldEl, newEl) {
+  if (oldEl.tagName !== newEl.tagName) return false
+
+  const oldText = oldEl.innerHTML.replace(/<[^>]+>/g, '').trim();
+  const newText = newEl.innerHTML.replace(/<[^>]+>/g, '').trim();
+
+  if (!oldText || !newText) return false
+
+  const similarity = calculateSimilarity(oldText, newText);
+  return similarity >= 0.8
+}
+
+/**
+ * 计算字符串相似度（简单实现）
+ */
+function calculateSimilarity(str1, str2) {
+  if (str1 === str2) return 1
+
+  const len1 = str1.length;
+  const len2 = str2.length;
+  const maxLen = Math.max(len1, len2);
+
+  if (maxLen === 0) return 1
+
+  // 使用简单的编辑距离
+  const distance = levenshteinDistance(str1, str2);
+  return 1 - distance / maxLen
+}
+
+/**
+ * 计算编辑距离
+ */
+function levenshteinDistance(str1, str2) {
+  const m = str1.length;
+  const n = str2.length;
+  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (str1[i - 1] === str2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+  }
+
+  return dp[m][n]
+}
+
+/**
+ * 对比两个 HTML 的样式差异
+ * @param {string} oldHtml - 旧 HTML
+ * @param {string} newHtml - 新 HTML
+ * @param {Object} options - 配置选项
+ * @returns {Object} { hasStyleDiff, styleChanges }
+ */
+function diffStyle(oldHtml, newHtml, options = {}) {
+  const { matchStrategy = 'auto' } = options;
+
+  if (!oldHtml || !newHtml) {
+    return { hasStyleDiff: false, styleChanges: [] }
+  }
+
+  // 提取元素
+  const oldElements = extractStyleElements(oldHtml);
+  const newElements = extractStyleElements(newHtml);
+
+  // 匹配元素
+  const matches = matchElements(oldElements, newElements, matchStrategy);
+
+  // 对比样式
+  const styleChanges = [];
+
+  for (const { oldElement, newElement } of matches) {
+    const oldStyleObj = parseStyle(oldElement.style);
+    const newStyleObj = parseStyle(newElement.style);
+
+    const diffResult = compareStyles(oldStyleObj, newStyleObj);
+
+    if (hasStyleDiff(diffResult)) {
+      styleChanges.push({
+        selector: newElement.id ? `#${newElement.id}` : newElement.path,
+        tagName: newElement.tagName,
+        oldStyle: oldElement.style,
+        newStyle: newElement.style,
+        oldHtml: oldElement.outerHTML,
+        newHtml: newElement.outerHTML,
+        diffDetails: diffResult
+      });
+    }
+  }
+
+  return {
+    hasStyleDiff: styleChanges.length > 0,
+    styleChanges
+  }
+}
+
+/**
+ * 样式变更提取器
+ * 从 diff 结果中提取样式变更，生成 styleChanges 数据
+ */
+
+/**
+ * 提取样式变更
+ * @param {Object} diffed - 差异后的数据
+ * @param {Object} last - 旧数据
+ * @param {Object} current - 新数据
+ * @param {Array} markers - 现有 marker 列表（会被修改）
+ * @param {Object} options - 配置选项
+ */
+function extractStyleMarkers(diffed, last, current, markers, options = {}) {
+  const { detectStyle = true, styleDiffConfig = {} } = options;
+
+  if (!detectStyle) return
+
+  // 收集已处理的字段
+  const processedFields = new Set();
+
+  // 1. 遍历现有 marker，检查是否有样式变更
+  for (const marker of markers) {
+    // 支持 field、html、text 类型的 marker
+    if (marker.type !== 'field' && marker.type !== 'html' && marker.type !== 'text') continue
+
+    const field = marker.field;
+    processedFields.add(field);
+
+    const oldContent = last ? last[field] : '';
+    const newContent = current ? current[field] : '';
+
+    if (!oldContent || !newContent) continue
+
+    // 对比样式
+    const styleResult = diffStyle(oldContent, newContent, styleDiffConfig);
+
+    if (styleResult.hasStyleDiff) {
+      // 将样式变更附加到现有 marker
+      marker.styleChanges = {
+        hasStyleDiff: true,
+        elements: styleResult.styleChanges.map(change => ({
+          selector: change.selector,
+          oldHtml: change.oldHtml,
+          newHtml: change.newHtml
+        })),
+        diffDetails: mergeDiffDetails(styleResult.styleChanges)
+      };
+    }
+  }
+
+  // 2. 检查未处理的字段（纯样式变更，没有内容变更）
+  const allFields = new Set([
+    ...Object.keys(diffed || {}),
+    ...Object.keys(last || {}),
+    ...Object.keys(current || {})
+  ]);
+
+  for (const field of allFields) {
+    if (processedFields.has(field)) continue
+    if (field.startsWith('_')) continue
+
+    const oldContent = last ? last[field] : '';
+    const newContent = current ? current[field] : '';
+
+    if (!oldContent || !newContent) continue
+    if (typeof oldContent !== 'string' || typeof newContent !== 'string') continue
+
+    // 检查是否可能是 HTML 内容
+    if (!looksLikeHtml(oldContent) && !looksLikeHtml(newContent)) continue
+
+    // 对比样式
+    const styleResult = diffStyle(oldContent, newContent, styleDiffConfig);
+
+    if (styleResult.hasStyleDiff) {
+      // 创建独立的样式变更 marker
+      markers.push({
+        id: `diff-style-${field}-0`,
+        type: 'style',
+        field,
+        fieldLabel: field,
+        position: markers.length + 1,
+        changeType: 'modify',
+        oldValue: '',
+        newValue: '',
+        styleChanges: {
+          hasStyleDiff: true,
+          elements: styleResult.styleChanges.map(change => ({
+            selector: change.selector,
+            oldHtml: change.oldHtml,
+            newHtml: change.newHtml
+          })),
+          diffDetails: mergeDiffDetails(styleResult.styleChanges)
+        }
+      });
+    }
+  }
+}
+
+/**
+ * 检查字符串是否看起来像 HTML
+ * @param {string} str - 字符串
+ * @returns {boolean}
+ */
+function looksLikeHtml(str) {
+  if (!str || typeof str !== 'string') return false
+  return /<[a-z][^>]*>/i.test(str)
+}
+
+/**
+ * 合并多个元素的差异详情
+ * @param {Array} styleChanges - 样式变更列表
+ * @returns {Object} 合并后的差异详情
+ */
+function mergeDiffDetails(styleChanges) {
+  const added = [];
+  const removed = [];
+  const changed = [];
+
+  for (const change of styleChanges) {
+    const details = change.diffDetails;
+
+    // 去重合并
+    for (const item of details.added) {
+      if (!added.find(a => a.property === item.property)) {
+        added.push(item);
+      }
+    }
+
+    for (const item of details.removed) {
+      if (!removed.find(r => r.property === item.property)) {
+        removed.push(item);
+      }
+    }
+
+    for (const item of details.changed) {
+      if (!changed.find(c => c.property === item.property)) {
+        changed.push(item);
+      }
+    }
+  }
+
+  return { added, removed, changed }
+}
+
+/**
  * 标记生成器
  * 从差异结果中提取变更标记
  */
@@ -3618,6 +4079,9 @@ function generateMarkers(diffResult, options = {}) {
 
   // 4. 提取自定义字段变更
   extractCustomMarkers(diffed, last, current, markers);
+
+  // 5. 提取样式变更（新增）
+  extractStyleMarkers(diffed, last, current, markers, options);
 
   // 排序
   return sortMarkers(markers)
@@ -7267,9 +7731,279 @@ function isLeaderLineAvailable() {
 }
 
 /**
+ * 弹窗组件
+ * 用于展示样式变更的新旧版本对比
+ */
+
+/**
+ * 创建弹窗实例
+ * @param {Object} options - 配置选项
+ * @returns {Object} 弹窗实例
+ */
+function createPopup(options = {}) {
+  const popupElement = createPopupElement();
+  let isVisible = false;
+
+  /**
+   * 显示弹窗
+   * @param {HTMLElement} targetElement - 目标元素（marker）
+   * @param {Object} marker - marker 数据
+   */
+  function show(targetElement, marker) {
+    if (!marker.styleChanges) return
+    renderContent(marker.styleChanges);
+    positionPopup(targetElement);
+    popupElement.classList.add('visible');
+    isVisible = true;
+  }
+
+  /**
+   * 隐藏弹窗
+   */
+  function hide() {
+    popupElement.classList.remove('visible');
+    isVisible = false;
+  }
+
+  /**
+   * 定位弹窗
+   * @param {HTMLElement} targetElement - 目标元素
+   */
+  function positionPopup(targetElement) {
+    const targetRect = targetElement.getBoundingClientRect();
+    const popupRect = popupElement.getBoundingClientRect();
+    const viewport = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY
+    };
+
+    // 计算位置（优先级：左侧 > 下方 > 右侧 > 上方）
+    const positions = [
+      { name: 'left', x: targetRect.left - popupRect.width - 10, y: targetRect.top },
+      { name: 'bottom', x: targetRect.left, y: targetRect.bottom + 10 },
+      { name: 'right', x: targetRect.right + 10, y: targetRect.top },
+      { name: 'top', x: targetRect.left, y: targetRect.top - popupRect.height - 10 }
+    ];
+
+    let selectedPosition = positions[0];
+
+    for (const pos of positions) {
+      if (isInViewport(pos, popupRect, viewport)) {
+        selectedPosition = pos;
+        break
+      }
+    }
+
+    let finalX = selectedPosition.x + viewport.scrollX;
+    let finalY = selectedPosition.y + viewport.scrollY;
+
+    const maxX = viewport.width - popupRect.width;
+    const maxY = viewport.height - popupRect.height;
+
+    if (finalX > maxX + viewport.scrollX) finalX = maxX + viewport.scrollX;
+    if (finalX < viewport.scrollX) finalX = viewport.scrollX;
+    if (finalY > maxY + viewport.scrollY) finalY = maxY + viewport.scrollY;
+    if (finalY < viewport.scrollY) finalY = viewport.scrollY;
+
+    popupElement.style.left = `${finalX}px`;
+    popupElement.style.top = `${finalY}px`;
+  }
+
+  /**
+   * 检查位置是否在视口内
+   */
+  function isInViewport(pos, popupRect, viewport) {
+    return pos.x >= 0 &&
+           pos.x + popupRect.width <= viewport.width &&
+           pos.y >= 0 &&
+           pos.y + popupRect.height <= viewport.height
+  }
+
+  /**
+   * 渲染弹窗内容
+   * @param {Object} styleChanges - 样式变更数据
+   */
+  function renderContent(styleChanges) {
+    const content = popupElement.querySelector('.rich-diff-popup-content');
+
+    content.innerHTML = `
+      <div class="rich-diff-popup-panels">
+        <div class="rich-diff-popup-panel">
+          <div class="rich-diff-popup-panel-title old-version">旧版本</div>
+          <div class="rich-diff-popup-panel-content" id="popup-old-panel"></div>
+        </div>
+        <div class="rich-diff-popup-panel">
+          <div class="rich-diff-popup-panel-title new-version">新版本</div>
+          <div class="rich-diff-popup-panel-content" id="popup-new-panel"></div>
+        </div>
+      </div>
+    `;
+
+    // 渲染面板内容
+    if (styleChanges.elements && styleChanges.elements.length > 0) {
+      renderPanelContent('popup-old-panel', styleChanges.elements, 'oldHtml');
+      renderPanelContent('popup-new-panel', styleChanges.elements, 'newHtml');
+    }
+  }
+
+  /**
+   * 渲染面板内容
+   */
+  function renderPanelContent(panelId, elements, htmlKey) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return
+
+    panel.innerHTML = '';
+
+    for (const element of elements) {
+      const container = document.createElement('div');
+      container.style.marginBottom = '8px';
+
+      // 使用 ShadowDOM 隔离样式
+      const shadow = container.attachShadow({ mode: 'open' });
+      shadow.innerHTML = element[htmlKey];
+
+      panel.appendChild(container);
+    }
+  }
+
+  /**
+   * 销毁弹窗
+   */
+  function destroy() {
+    if (popupElement.parentElement) {
+      popupElement.parentElement.removeChild(popupElement);
+    }
+  }
+
+  return {
+    element: popupElement,
+    show,
+    hide,
+    destroy,
+    get isVisible() { return isVisible }
+  }
+}
+
+/**
+ * 创建弹窗 DOM 元素
+ */
+function createPopupElement() {
+  const popup = document.createElement('div');
+  popup.className = 'rich-diff-popup';
+  popup.innerHTML = `
+    <div class="rich-diff-popup-header">
+      <span class="rich-diff-popup-title">样式变更</span>
+    </div>
+    <div class="rich-diff-popup-content"></div>
+  `;
+
+  injectStyles$1();
+  document.body.appendChild(popup);
+
+  return popup
+}
+
+/**
+ * 注入弹窗样式
+ */
+let stylesInjected = false;
+function injectStyles$1() {
+  if (stylesInjected) return
+
+  const styleText = `
+.rich-diff-popup {
+  position: absolute;
+  z-index: 10000;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.15);
+  max-width: 600px;
+  min-width: 320px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity .15s ease-in-out;
+  pointer-events: none;
+}
+.rich-diff-popup.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.rich-diff-popup-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  color: #333;
+  background: #fafafa;
+  border-radius: 8px 8px 0 0;
+}
+.rich-diff-popup-content {
+  padding: 12px;
+}
+/* 样式对比面板 */
+.rich-diff-popup-panels {
+  display: flex;
+  gap: 12px;
+}
+.rich-diff-popup-panel {
+  flex: 1;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.rich-diff-popup-panel-title {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+.rich-diff-popup-panel-title.old-version {
+  background: #ffebee;
+  color: #c62828;
+}
+.rich-diff-popup-panel-title.new-version {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.rich-diff-popup-panel-content {
+  padding: 12px;
+  min-height: 50px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #fafafa;
+}
+/* 响应式 */
+@media (max-width: 600px) {
+  .rich-diff-popup {
+    max-width: 90vw;
+    min-width: 280px;
+  }
+  .rich-diff-popup-panels {
+    flex-direction: column;
+  }
+}
+`;
+
+  const style = document.createElement('style');
+  style.textContent = styleText;
+  document.head.appendChild(style);
+
+  stylesInjected = true;
+}
+
+/**
  * 默认渲染器
  * 支持多字段对比和表单布局展示
  */
+
+// 弹窗实例
+let popupInstance = null;
+// marker 数据存储
+let markerStore = new Map();
 
 // 默认样式
 const DEFAULT_STYLES = `
@@ -7501,7 +8235,10 @@ const defaultRenderer = {
       newContent = '',
       fieldName = 'content',
       diffResult,
-      config = {}
+      config = {},
+      // 样式检测选项（支持顶层传入或 config 中传入）
+      detectStyle,
+      styleDiffConfig
     } = options;
 
     // 新增：支持多字段对比
@@ -7515,20 +8252,27 @@ const defaultRenderer = {
       return diffResult || null
     }
 
+    // 合并样式检测配置（优先使用顶层参数）
+    const mergedConfig = {
+      ...config,
+      detectStyle: detectStyle !== undefined ? detectStyle : config.detectStyle,
+      styleDiffConfig: styleDiffConfig || config.styleDiffConfig || {}
+    };
+
     // 判断使用哪种模式
     if (oldData && newData && fields) {
       // 多字段对比模式
-      return this.renderMultiFields(container, oldData, newData, fields, config)
+      return this.renderMultiFields(container, oldData, newData, fields, mergedConfig)
     } else {
       // 单字段模式（兼容旧 API）
-      return this.renderSingleField(container, oldContent, newContent, fieldName, diffResult, config)
+      return this.renderSingleField(container, oldContent, newContent, fieldName, diffResult, mergedConfig)
     }
   },
 
   /**
    * 多字段对比渲染
    */
-  renderMultiFields(container, oldData, newData, fields, config) {
+  renderMultiFields(container, oldData, newData, fields, config = {}) {
     // 注入样式
     injectStyles();
 
@@ -7538,6 +8282,9 @@ const defaultRenderer = {
     // 对比所有字段
     const fieldResults = [];
     const allMarkers = [];
+
+    // 获取样式检测配置
+    const { detectStyle = false, styleDiffConfig = {} } = config;
 
     sortedFields.forEach((fieldConfig, index) => {
       const { field, label } = fieldConfig;
@@ -7569,17 +8316,35 @@ const defaultRenderer = {
       allMarkers.push(...markers);
     });
 
+    // 样式检测：提取纯样式变更的 markers
+    if (detectStyle) {
+      const diffResult = {
+        diffed: {},
+        last: oldData,
+        current: newData
+      };
+
+      // 构建 diffed 对象
+      fieldResults.forEach(({ field, result }) => {
+        diffResult.diffed[field] = result.html;
+      });
+
+      // 直接调用 extractStyleMarkers 处理 allMarkers
+      // 这会：1. 为现有 marker 附加 styleChanges  2. 为纯样式变更创建新 marker（添加到 allMarkers）
+      extractStyleMarkers(diffResult.diffed, diffResult.last, diffResult.current, allMarkers, { detectStyle, styleDiffConfig });
+    }
+
     // 渲染 UI
     const elements = renderFormLayout(container, fieldResults, allMarkers);
 
     // 绑定交互
-    const state = bindInteractions(elements, allMarkers);
+    const state = bindInteractions(elements, allMarkers, config);
 
     return {
       container,
       fieldResults,
       markers: allMarkers,
-      destroy: () => destroyRenderer(state)
+      destroy: () => destroyRenderer(state, elements.container)
     }
   },
 
@@ -7941,11 +8706,13 @@ function renderUI(container, result, markers, fieldName, config) {
 /**
  * 绑定交互事件
  */
-function bindInteractions(elements, markers) {
+function bindInteractions(elements, markers, config = {}) {
   const state = {
     currentConnector: null,
     activeMarker: null
   };
+
+  const { detectStyle = false } = config;
 
   // 鼠标进入标记项
   elements.markersList.addEventListener('mouseenter', (e) => {
@@ -7973,6 +8740,14 @@ function bindInteractions(elements, markers) {
     }
 
     highlightMarker(elements, item, targetEl, state);
+
+    // 样式变更弹窗
+    if (detectStyle && marker && marker.styleChanges) {
+      if (!popupInstance) {
+        popupInstance = createPopup();
+      }
+      popupInstance.show(item, marker);
+    }
   }, true);
 
   // 鼠标离开标记项
@@ -7980,6 +8755,11 @@ function bindInteractions(elements, markers) {
     const item = e.target.closest('.rich-diff-marker-item');
     if (!item) return
     clearHighlight(elements, state);
+
+    // 隐藏弹窗
+    if (popupInstance) {
+      popupInstance.hide();
+    }
   }, true);
 
   return state
@@ -8052,13 +8832,30 @@ function clearHighlight(elements, state) {
 /**
  * 销毁渲染器
  */
-function destroyRenderer(state) {
+function destroyRenderer(state, container) {
   if (state.currentConnector) {
     try {
       state.currentConnector.line.remove();
     } catch (e) {}
   }
   clearConnectors();
+
+  // 销毁弹窗
+  if (popupInstance) {
+    popupInstance.destroy();
+    popupInstance = null;
+  }
+
+  // 清理 marker 存储
+  if (container) {
+    const markerElements = container.querySelectorAll('[data-style-diff]');
+    markerElements.forEach(el => {
+      el.removeEventListener('mouseenter', null);
+      el.removeEventListener('mouseleave', null);
+    });
+  }
+
+  markerStore.clear();
 }
 
 /**
@@ -8122,6 +8919,8 @@ function getRenderer() {
  * @param {Array} options.fields - 字段配置 [{ label, field, sort }]
  * @param {Object} options.diffResult - 已有的对比结果（可选，优先使用）
  * @param {Object} options.rendererConfig - 渲染器配置（可选）
+ * @param {boolean} options.detectStyle - 是否检测样式变更（可选）
+ * @param {Object} options.styleDiffConfig - 样式对比配置（可选）
  * @returns {Object} { html, markers, container } - 若传入容器则已渲染，否则返回原始数据
  */
 function render(options = {}) {
@@ -8134,7 +8933,9 @@ function render(options = {}) {
     newData,
     fields,
     diffResult,
-    rendererConfig
+    rendererConfig,
+    detectStyle,
+    styleDiffConfig
   } = options;
 
   // 如果不传容器，返回原始数据供用户自行渲染
@@ -8152,7 +8953,9 @@ function render(options = {}) {
     newData,
     fields,
     diffResult,
-    config: rendererConfig
+    config: rendererConfig,
+    detectStyle,
+    styleDiffConfig
   })
 }
 
@@ -8208,5 +9011,5 @@ var index$1 = {
   diffWithEngine
 };
 
-export { ChangeTypes, DefaultConfig, ErrorTypes, MediaTypes, cleanContent, clearConnectors, computeArticleDiff, createConnector, createConnectorFromMarker, createConnectors, index$1 as default, defaultRenderer, detectChangeType, diffCustomField, diffCustomFields, diffDocFile, diffField, diffFixedFields, diffHTML, diffMediaList, diffPriority, diffText, diffWithEngine, extractDiffMarkers, extractMediaChanges$1 as extractMediaChanges, findElementById, generateMarkers, getAvailableEngines, getConnectorCount, getDiffRanges, getEngine, getEngineName, getRenderer, hasDiffMarkers, hasEngine, isLeaderLineAvailable, parseDocFile, removeConnector, render, resetAllCounters, setEngine, setRenderer, sortMarkers, updateAllConnectors, updateConnector };
+export { ChangeTypes, DefaultConfig, ErrorTypes, MediaTypes, cleanContent, clearConnectors, compareStyles, computeArticleDiff, createConnector, createConnectorFromMarker, createConnectors, createPopup, index$1 as default, defaultRenderer, detectChangeType, diffCustomField, diffCustomFields, diffDocFile, diffField, diffFixedFields, diffHTML, diffMediaList, diffPriority, diffStyle, diffText, diffWithEngine, extractDiffMarkers, extractMediaChanges$1 as extractMediaChanges, extractStyleElements, findElementById, generateMarkers, getAvailableEngines, getConnectorCount, getDiffRanges, getEngine, getEngineName, getRenderer, hasDiffMarkers, hasEngine, hasStyleDiff, isLeaderLineAvailable, matchElements, parseDocFile, parseStyle, removeConnector, render, resetAllCounters, setEngine, setRenderer, sortMarkers, updateAllConnectors, updateConnector };
 //# sourceMappingURL=rich-diff.dev.js.map

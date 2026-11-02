@@ -6,6 +6,7 @@ import { diffHTML, diffText } from '../adapters/index.js'
 import { generateMarkers } from '../markers/index.js'
 import { createConnector, clearConnectors } from '../leader-line/index.js'
 import { createPopup } from '../popup/index.js'
+import { extractStyleMarkers } from '../markers/styleExtractor.js'
 
 // 弹窗实例
 let popupInstance = null
@@ -242,7 +243,10 @@ export const defaultRenderer = {
       newContent = '',
       fieldName = 'content',
       diffResult,
-      config = {}
+      config = {},
+      // 样式检测选项（支持顶层传入或 config 中传入）
+      detectStyle,
+      styleDiffConfig
     } = options
 
     // 新增：支持多字段对比
@@ -256,13 +260,20 @@ export const defaultRenderer = {
       return diffResult || null
     }
 
+    // 合并样式检测配置（优先使用顶层参数）
+    const mergedConfig = {
+      ...config,
+      detectStyle: detectStyle !== undefined ? detectStyle : config.detectStyle,
+      styleDiffConfig: styleDiffConfig || config.styleDiffConfig || {}
+    }
+
     // 判断使用哪种模式
     if (oldData && newData && fields) {
       // 多字段对比模式
-      return this.renderMultiFields(container, oldData, newData, fields, config)
+      return this.renderMultiFields(container, oldData, newData, fields, mergedConfig)
     } else {
       // 单字段模式（兼容旧 API）
-      return this.renderSingleField(container, oldContent, newContent, fieldName, diffResult, config)
+      return this.renderSingleField(container, oldContent, newContent, fieldName, diffResult, mergedConfig)
     }
   },
 
@@ -313,7 +324,7 @@ export const defaultRenderer = {
       allMarkers.push(...markers)
     })
 
-    // 样式检测：通过 generateMarkers 提取样式变更
+    // 样式检测：提取纯样式变更的 markers
     if (detectStyle) {
       const diffResult = {
         diffed: {},
@@ -326,23 +337,9 @@ export const defaultRenderer = {
         diffResult.diffed[field] = result.html
       })
 
-      // 调用 generateMarkers 提取样式变更（会修改 allMarkers）
-      generateMarkers(diffResult, { detectStyle, styleDiffConfig })
-
-      // 将样式变更合并到 allMarkers
-      const styleMarkers = allMarkers.map(marker => {
-        // 从 generateMarkers 的结果中查找对应的样式变更
-        const styleResult = generateMarkers(diffResult, { detectStyle, styleDiffConfig })
-        const matchedMarker = styleResult.find(m => m.field === marker.field)
-        if (matchedMarker && matchedMarker.styleChanges) {
-          return { ...marker, styleChanges: matchedMarker.styleChanges }
-        }
-        return marker
-      })
-
-      // 更新 allMarkers
-      allMarkers.length = 0
-      allMarkers.push(...styleMarkers)
+      // 直接调用 extractStyleMarkers 处理 allMarkers
+      // 这会：1. 为现有 marker 附加 styleChanges  2. 为纯样式变更创建新 marker（添加到 allMarkers）
+      extractStyleMarkers(diffResult.diffed, diffResult.last, diffResult.current, allMarkers, { detectStyle, styleDiffConfig })
     }
 
     // 渲染 UI

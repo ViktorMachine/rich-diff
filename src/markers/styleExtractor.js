@@ -17,11 +17,17 @@ export function extractStyleMarkers(diffed, last, current, markers, options = {}
 
   if (!detectStyle) return
 
-  // 遍历所有 marker，检查是否有样式变更
+  // 收集已处理的字段
+  const processedFields = new Set()
+
+  // 1. 遍历现有 marker，检查是否有样式变更
   for (const marker of markers) {
-    if (marker.type !== 'html' && marker.type !== 'text') continue
+    // 支持 field、html、text 类型的 marker
+    if (marker.type !== 'field' && marker.type !== 'html' && marker.type !== 'text') continue
 
     const field = marker.field
+    processedFields.add(field)
+
     const oldContent = last ? last[field] : ''
     const newContent = current ? current[field] : ''
 
@@ -43,6 +49,63 @@ export function extractStyleMarkers(diffed, last, current, markers, options = {}
       }
     }
   }
+
+  // 2. 检查未处理的字段（纯样式变更，没有内容变更）
+  const allFields = new Set([
+    ...Object.keys(diffed || {}),
+    ...Object.keys(last || {}),
+    ...Object.keys(current || {})
+  ])
+
+  for (const field of allFields) {
+    if (processedFields.has(field)) continue
+    if (field.startsWith('_')) continue
+
+    const oldContent = last ? last[field] : ''
+    const newContent = current ? current[field] : ''
+
+    if (!oldContent || !newContent) continue
+    if (typeof oldContent !== 'string' || typeof newContent !== 'string') continue
+
+    // 检查是否可能是 HTML 内容
+    if (!looksLikeHtml(oldContent) && !looksLikeHtml(newContent)) continue
+
+    // 对比样式
+    const styleResult = diffStyle(oldContent, newContent, styleDiffConfig)
+
+    if (styleResult.hasStyleDiff) {
+      // 创建独立的样式变更 marker
+      markers.push({
+        id: `diff-style-${field}-0`,
+        type: 'style',
+        field,
+        fieldLabel: field,
+        position: markers.length + 1,
+        changeType: 'modify',
+        oldValue: '',
+        newValue: '',
+        styleChanges: {
+          hasStyleDiff: true,
+          elements: styleResult.styleChanges.map(change => ({
+            selector: change.selector,
+            oldHtml: change.oldHtml,
+            newHtml: change.newHtml
+          })),
+          diffDetails: mergeDiffDetails(styleResult.styleChanges)
+        }
+      })
+    }
+  }
+}
+
+/**
+ * 检查字符串是否看起来像 HTML
+ * @param {string} str - 字符串
+ * @returns {boolean}
+ */
+function looksLikeHtml(str) {
+  if (!str || typeof str !== 'string') return false
+  return /<[a-z][^>]*>/i.test(str)
 }
 
 /**

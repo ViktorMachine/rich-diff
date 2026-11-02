@@ -32,26 +32,44 @@
   <h1>样式对比功能测试</h1>
 
   <div class="test-section">
-    <div class="test-title">测试 1: 单个元素样式变更</div>
+    <div class="test-title">测试 1: 纯样式变更（内容相同）</div>
     <div id="test1" class="diff-container"></div>
   </div>
 
   <div class="test-section">
-    <div class="test-title">测试 2: 多个元素样式变更</div>
+    <div class="test-title">测试 2: 内容变更 + 样式变更</div>
     <div id="test2" class="diff-container"></div>
   </div>
 
   <div class="test-section">
-    <div class="test-title">测试 3: 无样式变更</div>
+    <div class="test-title">测试 3: 多个元素样式变更</div>
     <div id="test3" class="diff-container"></div>
   </div>
 
-  <script type="module">
-    import { render } from '../../src/index.js'
+  <div class="test-section">
+    <div class="test-title">测试 4: 无样式变更</div>
+    <div id="test4" class="diff-container"></div>
+  </div>
 
-    // 测试 1
+  <script type="module">
+    import { render } from '../../dist/rich-diff.dev.js'
+
+    // 测试 1: 纯样式变更（内容相同）
     render({
       container: document.getElementById('test1'),
+      oldData: {
+        content: '<p style="color:red;font-size:14px">这是相同的内容</p>'
+      },
+      newData: {
+        content: '<p style="color:blue;font-size:16px">这是相同的内容</p>'
+      },
+      fields: [{ label: '内容', field: 'content', sort: 1 }],
+      detectStyle: true
+    })
+
+    // 测试 2: 内容变更 + 样式变更
+    render({
+      container: document.getElementById('test2'),
       oldData: {
         content: '<p style="color:red;font-size:14px">这是旧内容</p>'
       },
@@ -62,9 +80,9 @@
       detectStyle: true
     })
 
-    // 测试 2
+    // 测试 3: 多个元素样式变更
     render({
-      container: document.getElementById('test2'),
+      container: document.getElementById('test3'),
       oldData: {
         content: '<p style="color:red">段落1</p><div style="margin:10px">段落2</div>'
       },
@@ -75,9 +93,9 @@
       detectStyle: true
     })
 
-    // 测试 3
+    // 测试 4: 无样式变更
     render({
-      container: document.getElementById('test3'),
+      container: document.getElementById('test4'),
       oldData: {
         content: '<p style="color:red">内容</p>'
       },

@@ -40,6 +40,8 @@ export function getRenderer() {
  * @param {Array} options.fields - 字段配置 [{ label, field, sort }]
  * @param {Object} options.diffResult - 已有的对比结果（可选，优先使用）
  * @param {Object} options.rendererConfig - 渲染器配置（可选）
+ * @param {boolean} options.detectStyle - 是否检测样式变更（可选）
+ * @param {Object} options.styleDiffConfig - 样式对比配置（可选）
  * @returns {Object} { html, markers, container } - 若传入容器则已渲染，否则返回原始数据
  */
 export function render(options = {}) {
@@ -52,7 +54,9 @@ export function render(options = {}) {
     newData,
     fields,
     diffResult,
-    rendererConfig
+    rendererConfig,
+    detectStyle,
+    styleDiffConfig
   } = options
 
   // 如果不传容器，返回原始数据供用户自行渲染
@@ -70,7 +74,9 @@ export function render(options = {}) {
     newData,
     fields,
     diffResult,
-    config: rendererConfig
+    config: rendererConfig,
+    detectStyle,
+    styleDiffConfig
   })
 }
 
