@@ -10,7 +10,8 @@
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "test": "echo \"请在浏览器中打开 test/index.html 进行测试\"",
-    "prepublishOnly": "npm run build"
+    "check:es5": "node scripts/check-es5.js",
+    "prepublishOnly": "npm run build && npm run check:es5"
   },
   "keywords": [
     "diff",
@@ -46,6 +47,9 @@
     }
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.0",
+    "@rollup/plugin-babel": "^7.1.0",
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.4",
