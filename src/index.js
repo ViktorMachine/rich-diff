@@ -79,6 +79,19 @@ import {
   ChangeTypes
 } from './utils/constants.js'
 
+// ── 样式对比 ──
+import {
+  diffStyle,
+  extractStyleElements,
+  matchElements
+} from './diff/style.js'
+import {
+  parseStyle,
+  compareStyles,
+  hasStyleDiff
+} from './utils/styleParser.js'
+import { createPopup } from './popup/index.js'
+
 // ── 导出 ──
 export {
   // 引擎层
@@ -130,7 +143,15 @@ export {
   ErrorTypes,
   DefaultConfig,
   MediaTypes,
-  ChangeTypes
+  ChangeTypes,
+  // 样式对比
+  diffStyle,
+  extractStyleElements,
+  matchElements,
+  parseStyle,
+  compareStyles,
+  hasStyleDiff,
+  createPopup
 }
 
 // ── 便捷方法 ──

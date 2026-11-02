@@ -5,6 +5,12 @@
 import { diffHTML, diffText } from '../adapters/index.js'
 import { generateMarkers } from '../markers/index.js'
 import { createConnector, clearConnectors } from '../leader-line/index.js'
+import { createPopup } from '../popup/index.js'
+
+// 弹窗实例
+let popupInstance = null
+// marker 数据存储
+let markerStore = new Map()
 
 // 默认样式
 const DEFAULT_STYLES = `
@@ -263,7 +269,7 @@ export const defaultRenderer = {
   /**
    * 多字段对比渲染
    */
-  renderMultiFields(container, oldData, newData, fields, config) {
+  renderMultiFields(container, oldData, newData, fields, config = {}) {
     // 注入样式
     injectStyles(container)
 
@@ -273,6 +279,9 @@ export const defaultRenderer = {
     // 对比所有字段
     const fieldResults = []
     const allMarkers = []
+
+    // 获取样式检测配置
+    const { detectStyle = false, styleDiffConfig = {} } = config
 
     sortedFields.forEach((fieldConfig, index) => {
       const { field, label } = fieldConfig
@@ -304,17 +313,49 @@ export const defaultRenderer = {
       allMarkers.push(...markers)
     })
 
+    // 样式检测：通过 generateMarkers 提取样式变更
+    if (detectStyle) {
+      const diffResult = {
+        diffed: {},
+        last: oldData,
+        current: newData
+      }
+
+      // 构建 diffed 对象
+      fieldResults.forEach(({ field, result }) => {
+        diffResult.diffed[field] = result.html
+      })
+
+      // 调用 generateMarkers 提取样式变更（会修改 allMarkers）
+      generateMarkers(diffResult, { detectStyle, styleDiffConfig })
+
+      // 将样式变更合并到 allMarkers
+      const styleMarkers = allMarkers.map(marker => {
+        // 从 generateMarkers 的结果中查找对应的样式变更
+        const styleResult = generateMarkers(diffResult, { detectStyle, styleDiffConfig })
+        const matchedMarker = styleResult.find(m => m.field === marker.field)
+        if (matchedMarker && matchedMarker.styleChanges) {
+          return { ...marker, styleChanges: matchedMarker.styleChanges }
+        }
+        return marker
+      })
+
+      // 更新 allMarkers
+      allMarkers.length = 0
+      allMarkers.push(...styleMarkers)
+    }
+
     // 渲染 UI
     const elements = renderFormLayout(container, fieldResults, allMarkers, config)
 
     // 绑定交互
-    const state = bindInteractions(elements, allMarkers)
+    const state = bindInteractions(elements, allMarkers, config)
 
     return {
       container,
       fieldResults,
       markers: allMarkers,
-      destroy: () => destroyRenderer(state)
+      destroy: () => destroyRenderer(state, elements.container)
     }
   },
 
@@ -676,11 +717,13 @@ function renderUI(container, result, markers, fieldName, config) {
 /**
  * 绑定交互事件
  */
-function bindInteractions(elements, markers) {
+function bindInteractions(elements, markers, config = {}) {
   const state = {
     currentConnector: null,
     activeMarker: null
   }
+
+  const { detectStyle = false } = config
 
   // 鼠标进入标记项
   elements.markersList.addEventListener('mouseenter', (e) => {
@@ -708,6 +751,14 @@ function bindInteractions(elements, markers) {
     }
 
     highlightMarker(elements, item, targetEl, state)
+
+    // 样式变更弹窗
+    if (detectStyle && marker && marker.styleChanges) {
+      if (!popupInstance) {
+        popupInstance = createPopup()
+      }
+      popupInstance.show(item, marker)
+    }
   }, true)
 
   // 鼠标离开标记项
@@ -715,6 +766,11 @@ function bindInteractions(elements, markers) {
     const item = e.target.closest('.rich-diff-marker-item')
     if (!item) return
     clearHighlight(elements, state)
+
+    // 隐藏弹窗
+    if (popupInstance) {
+      popupInstance.hide()
+    }
   }, true)
 
   return state
@@ -787,13 +843,30 @@ function clearHighlight(elements, state) {
 /**
  * 销毁渲染器
  */
-function destroyRenderer(state) {
+function destroyRenderer(state, container) {
   if (state.currentConnector) {
     try {
       state.currentConnector.line.remove()
     } catch (e) {}
   }
   clearConnectors()
+
+  // 销毁弹窗
+  if (popupInstance) {
+    popupInstance.destroy()
+    popupInstance = null
+  }
+
+  // 清理 marker 存储
+  if (container) {
+    const markerElements = container.querySelectorAll('[data-style-diff]')
+    markerElements.forEach(el => {
+      el.removeEventListener('mouseenter', null)
+      el.removeEventListener('mouseleave', null)
+    })
+  }
+
+  markerStore.clear()
 }
 
 /**
