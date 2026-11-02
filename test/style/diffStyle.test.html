@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>diffStyle 测试</title>
+</head>
+<body>
+  <h1>diffStyle 测试</h1>
+  <pre id="results"></pre>
+  <script type="module">
+    import { diffStyle, extractStyleElements, matchElements } from '../../src/diff/style.js'
+
+    let passed = 0
+    let failed = 0
+    const results = []
+
+    function test(name, fn) {
+      try {
+        fn()
+        results.push(`✓ ${name}`)
+        passed++
+      } catch (e) {
+        results.push(`✗ ${name}: ${e.message}`)
+        failed++
+      }
+    }
+
+    function expect(actual) {
+      return {
+        toEqual(expected) {
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
+          }
+        },
+        toBe(expected) {
+          if (actual !== expected) {
+            throw new Error(`Expected ${expected}, got ${actual}`)
+          }
+        },
+        toBeTrue() {
+          if (!actual) {
+            throw new Error(`Expected true, got ${actual}`)
+          }
+        }
+      }
+    }
+
+    // extractStyleElements 测试
+    test('extractStyleElements: 提取带 style 的元素', () => {
+      const html = '<p style="color:red">文本</p><div>无样式</div>'
+      const elements = extractStyleElements(html)
+      expect(elements.length).toBe(1)
+      expect(elements[0].tagName).toBe('p')
+      expect(elements[0].style).toBe('color:red')
+    })
+
+    test('extractStyleElements: 提取多个元素', () => {
+      const html = '<p style="color:red">A</p><span style="font-size:14px">B</span>'
+      const elements = extractStyleElements(html)
+      expect(elements.length).toBe(2)
+    })
+
+    // matchElements 测试
+    test('matchElements: 通过 ID 匹配', () => {
+      const oldElements = [{ id: 'p1', path: 'p', style: 'color:red' }]
+      const newElements = [{ id: 'p1', path: 'p', style: 'color:blue' }]
+      const matches = matchElements(oldElements, newElements, 'id')
+      expect(matches.length).toBe(1)
+      expect(matches[0].oldElement.id).toBe('p1')
+      expect(matches[0].newElement.id).toBe('p1')
+    })
+
+    // diffStyle 测试
+    test('diffStyle: 检测样式差异', () => {
+      const oldHtml = '<p style="color:red">文本</p>'
+      const newHtml = '<p style="color:blue">文本</p>'
+      const result = diffStyle(oldHtml, newHtml)
+      expect(result.hasStyleDiff).toBeTrue()
+      expect(result.styleChanges.length).toBe(1)
+    })
+
+    test('diffStyle: 无样式差异', () => {
+      const oldHtml = '<p style="color:red">文本</p>'
+      const newHtml = '<p style="color:red">文本</p>'
+      const result = diffStyle(oldHtml, newHtml)
+      expect(result.hasStyleDiff).toBe(false)
+    })
+
+    test('diffStyle: 空输入', () => {
+      const result = diffStyle('', '')
+      expect(result.hasStyleDiff).toBe(false)
+    })
+
+    // 输出结果
+    document.getElementById('results').textContent = results.join('\n') + `\n\n测试结果: ${passed} 通过, ${failed} 失败`
+    console.log(`\n测试结果: ${passed} 通过, ${failed} 失败`)
+  </script>
+</body>
+</html>
