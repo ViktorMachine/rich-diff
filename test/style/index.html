@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>样式对比功能测试</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .test-section {
+      margin-bottom: 40px;
+      padding: 20px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+    }
+    .test-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .diff-container {
+      border: 1px solid #ccc;
+      padding: 16px;
+      min-height: 100px;
+    }
+  </style>
+</head>
+<body>
+  <h1>样式对比功能测试</h1>
+
+  <div class="test-section">
+    <div class="test-title">测试 1: 单个元素样式变更</div>
+    <div id="test1" class="diff-container"></div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-title">测试 2: 多个元素样式变更</div>
+    <div id="test2" class="diff-container"></div>
+  </div>
+
+  <div class="test-section">
+    <div class="test-title">测试 3: 无样式变更</div>
+    <div id="test3" class="diff-container"></div>
+  </div>
+
+  <script type="module">
+    import { render } from '../../src/index.js'
+
+    // 测试 1
+    render({
+      container: document.getElementById('test1'),
+      oldData: {
+        content: '<p style="color:red;font-size:14px">这是旧内容</p>'
+      },
+      newData: {
+        content: '<p style="color:blue;font-size:16px">这是新内容</p>'
+      },
+      fields: [{ label: '内容', field: 'content', sort: 1 }],
+      detectStyle: true
+    })
+
+    // 测试 2
+    render({
+      container: document.getElementById('test2'),
+      oldData: {
+        content: '<p style="color:red">段落1</p><div style="margin:10px">段落2</div>'
+      },
+      newData: {
+        content: '<p style="color:blue">段落1</p><div style="padding:20px">段落2</div>'
+      },
+      fields: [{ label: '内容', field: 'content', sort: 1 }],
+      detectStyle: true
+    })
+
+    // 测试 3
+    render({
+      container: document.getElementById('test3'),
+      oldData: {
+        content: '<p style="color:red">内容</p>'
+      },
+      newData: {
+        content: '<p style="color:red">内容</p>'
+      },
+      fields: [{ label: '内容', field: 'content', sort: 1 }],
+      detectStyle: true
+    })
+
+    console.log('测试页面加载完成')
+  </script>
+</body>
+</html>
