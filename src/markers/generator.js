@@ -7,6 +7,7 @@ import { extractTextMarkers } from './textExtractor.js'
 import { extractHTMLMarkers } from './htmlExtractor.js'
 import { extractMediaMarkers } from './mediaExtractor.js'
 import { extractCustomMarkers } from './customExtractor.js'
+import { extractStyleMarkers } from './styleExtractor.js'
 
 const GROUP_PRIORITY = DefaultConfig.groupPriority
 
@@ -35,6 +36,9 @@ export function generateMarkers(diffResult, options = {}) {
 
   // 4. 提取自定义字段变更
   extractCustomMarkers(diffed, last, current, markers)
+
+  // 5. 提取样式变更（新增）
+  extractStyleMarkers(diffed, last, current, markers, options)
 
   // 排序
   return sortMarkers(markers)
