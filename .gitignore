@@ -2,3 +2,5 @@ node_modules/
 .vscode
 docs
 .playwright-mcp
+example/
+test/

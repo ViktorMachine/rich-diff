@@ -97,17 +97,77 @@ function adaptHtmlDiffEngine(oldHtml, newHtml, fieldName) {
   const engine = getEngine()
   let result = engine.diffHTML(oldHtml, newHtml)
 
-  // 注入 data-diff 属性
-  result = result.replace(/<ins([^>]*)>/g, (match, attrs) => {
-    if (attrs.includes('data-diff')) return match
-    const diffId = createDiffId('add', fieldName, addCounter++)
-    return `<ins${attrs} data-diff="add" data-diff-id="${diffId}" data-diff-field="${fieldName}">`
+  // 注入 data-diff 属性和样式（只给 htmldiff 生成的差异标签添加）
+  // htmldiff 生成的标签特征：带有 class="diffins"、"diffdel"、"diffmod"
+  result = result.replace(/<ins(\s[^>]*)?>/gi, (match, attrs) => {
+    // 如果已经有 data-diff 属性，跳过（已经是处理过的）
+    if (attrs && attrs.includes('data-diff')) return match
+
+    // 检查是否是 htmldiff 生成的差异标签
+    const isDiffTag = attrs && (
+      attrs.includes('class="diffins"') ||
+      attrs.includes('class="diffmod"') ||
+      attrs.includes("class='diffins'") ||
+      attrs.includes("class='diffmod'")
+    )
+
+    if (isDiffTag) {
+      const diffId = createDiffId('add', fieldName, addCounter++)
+      // 移除原有的 class，添加内联样式和 data-diff 属性
+      const cleanAttrs = attrs
+        .replace(/class="[^"]*"/gi, '')
+        .replace(/class='[^']*'/gi, '')
+        .trim()
+      const style = `style="color: ${DefaultConfig.diffStyles.add.color}; background: ${DefaultConfig.diffStyles.add.background};"`
+      return `<ins ${cleanAttrs} ${style} data-diff="add" data-diff-id="${diffId}" data-diff-field="${fieldName}">`
+    }
+    // 用户原内容的标签，不处理
+    return match
   })
 
-  result = result.replace(/<del([^>]*)>/g, (match, attrs) => {
-    if (attrs.includes('data-diff')) return match
-    const diffId = createDiffId('del', fieldName, delCounter++)
-    return `<del${attrs} data-diff="del" data-diff-id="${diffId}" data-diff-field="${fieldName}">`
+  result = result.replace(/<del(\s[^>]*)?>/gi, (match, attrs) => {
+    if (attrs && attrs.includes('data-diff')) return match
+
+    const isDiffTag = attrs && (
+      attrs.includes('class="diffdel"') ||
+      attrs.includes('class="diffmod"') ||
+      attrs.includes("class='diffdel'") ||
+      attrs.includes("class='diffmod'")
+    )
+
+    if (isDiffTag) {
+      const diffId = createDiffId('del', fieldName, delCounter++)
+      const cleanAttrs = attrs
+        .replace(/class="[^"]*"/gi, '')
+        .replace(/class='[^']*'/gi, '')
+        .trim()
+      const style = `style="color: ${DefaultConfig.diffStyles.del.color}; background: ${DefaultConfig.diffStyles.del.background}; text-decoration: ${DefaultConfig.diffStyles.del.textDecoration};"`
+      return `<del ${cleanAttrs} ${style} data-diff="del" data-diff-id="${diffId}" data-diff-field="${fieldName}">`
+    }
+    return match
+  })
+
+  // 处理 difftext 标签（htmldiff 在某些情况下会生成）
+  result = result.replace(/<difftext(\s[^>]*)?>/gi, (match, attrs) => {
+    if (attrs && attrs.includes('data-diff')) return match
+
+    const isAdd = attrs && (attrs.includes('class="diffins"') || attrs.includes("class='diffins'"))
+    const isDel = attrs && (attrs.includes('class="diffdel"') || attrs.includes("class='diffdel'"))
+    const isMod = attrs && (attrs.includes('class="diffmod"') || attrs.includes("class='diffmod'"))
+
+    if (isAdd || isDel || isMod) {
+      const diffType = isMod ? 'modify' : (isAdd ? 'add' : 'del')
+      const diffId = createDiffId(diffType === 'add' ? 'add' : 'del', fieldName, diffType === 'add' ? addCounter++ : delCounter++)
+      const cleanAttrs = attrs
+        .replace(/class="[^"]*"/gi, '')
+        .replace(/class='[^']*'/gi, '')
+        .trim()
+
+      const styleConfig = diffType === 'add' ? DefaultConfig.diffStyles.add : DefaultConfig.diffStyles.del
+      const style = `style="color: ${styleConfig.color}; background: ${styleConfig.background};${diffType !== 'add' ? ` text-decoration: ${DefaultConfig.diffStyles.del.textDecoration};` : ''}"`
+      return `<difftext ${cleanAttrs} ${style} data-diff="${diffType}" data-diff-id="${diffId}" data-diff-field="${fieldName}">`
+    }
+    return match
   })
 
   return result
@@ -202,16 +262,27 @@ function isStyleOnlyChange(oldHtml, newHtml) {
 
 /**
  * 转换为 ShadowDOM 格式
+ * 只转换差异引擎生成的标签（带有 data-diff 属性）
  */
 function convertToShadowDOM(html) {
   let result = html
 
+  // 只转换带有 data-diff 属性的 ins 标签
   result = result.replace(/<ins([^>]*)>([\s\S]*?)<\/ins>/gi, (match, attrs, content) => {
-    return `<difftext${attrs}>${content}</difftext>`
+    // 只有带有 data-diff 属性的才转换
+    if (attrs && attrs.includes('data-diff=')) {
+      return `<difftext${attrs}>${content}</difftext>`
+    }
+    // 用户原内容的标签保持不变
+    return match
   })
 
+  // 只转换带有 data-diff 属性的 del 标签
   result = result.replace(/<del([^>]*)>([\s\S]*?)<\/del>/gi, (match, attrs, content) => {
-    return `<difftext${attrs}>${content}</difftext>`
+    if (attrs && attrs.includes('data-diff=')) {
+      return `<difftext${attrs}>${content}</difftext>`
+    }
+    return match
   })
 
   return result
