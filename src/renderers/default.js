@@ -259,7 +259,7 @@ const DEFAULT_STYLES = `
   }
 
   /* 差异样式 */
-  .rich-diff-field-content ins,
+  .rich-diff-field-content ins[data-diff],
   .rich-diff-field-content .diff-add,
   .rich-diff-field-content difftext[data-diff="add"] {
     color: #1878E8;
@@ -268,8 +268,7 @@ const DEFAULT_STYLES = `
     padding: 1px 3px;
     border-radius: 2px;
   }
-
-  .rich-diff-field-content del,
+  .rich-diff-field-content del[data-diff],
   .rich-diff-field-content .diff-del,
   .rich-diff-field-content difftext[data-diff="del"] {
     color: #D32F2F;
