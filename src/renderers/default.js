@@ -487,12 +487,15 @@ export const defaultRenderer = {
       // 使用修改后的 HTML（带有 marker-id）
       const markedHtml = markers.html || result.html
 
+      // 优先使用 result.hasDiff，否则使用 hasDifference 判断
+      const fieldHasDiff = result.hasDiff !== undefined ? result.hasDiff : hasDifference(result.html, oldValue, newValue)
+
       fieldResults.push({
         field,
         label,
         result: { ...result, html: markedHtml },
         markers,
-        hasDiff: hasDifference(result.html, oldValue, newValue)
+        hasDiff: fieldHasDiff
       })
 
       allMarkers.push(...markers)

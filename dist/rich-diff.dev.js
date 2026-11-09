@@ -3250,7 +3250,7 @@ function resetAllCounters() {
  * @param {string|Array} newVal - 新值
  * @param {string} fieldName - 字段名称
  * @param {Object} options - 配置选项
- * @param {string} options.type - 字段类型: 'normal' | 'dynamic' | 'file' | 'files' | 'image' | 'images' | 'video' | 'videos'
+ * @param {string} options.type - 字段类型: 'text' | 'dynamic' | 'file' | 'image' | 'video'
  * @param {boolean} options.mayContainHtml - 是否可能包含 HTML
  * @returns {Object} { html, useShadowDOM, markers, hasDiff }
  */
@@ -3260,7 +3260,7 @@ function diffField(oldVal, newVal, fieldName, options) {
   }
   var _options = options,
     _options$type = _options.type,
-    type = _options$type === void 0 ? 'normal' : _options$type,
+    type = _options$type === void 0 ? 'text' : _options$type,
     _options$mayContainHt = _options.mayContainHtml,
     mayContainHtml = _options$mayContainHt === void 0 ? false : _options$mayContainHt;
 
@@ -3269,17 +3269,20 @@ function diffField(oldVal, newVal, fieldName, options) {
     return diffDynamicField(oldVal, newVal, fieldName);
   }
 
-  // 资源类型：file, image, video（单数）
+  // 资源类型：file, image, video（根据 value 类型自动判断单个/数组）
   if (type === 'file' || type === 'image' || type === 'video') {
+    // 判断是否为数组
+    var isOldArray = Array.isArray(oldVal) || typeof oldVal === 'string' && isJsonArray(oldVal);
+    var isNewArray = Array.isArray(newVal) || typeof newVal === 'string' && isJsonArray(newVal);
+    if (isOldArray || isNewArray) {
+      // 数组模式
+      return diffResourcesField(oldVal, newVal, fieldName, type);
+    }
+    // 单个模式
     return diffResourceField(oldVal, newVal, fieldName, type);
   }
 
-  // 资源类型：files, images, videos（复数）
-  if (type === 'files' || type === 'images' || type === 'videos') {
-    return diffResourcesField(oldVal, newVal, fieldName, type);
-  }
-
-  // normal 类型：快速相等判断
+  // text 类型：快速相等判断
   if (oldVal === newVal) {
     return {
       html: newVal,
@@ -3299,21 +3302,37 @@ function diffField(oldVal, newVal, fieldName, options) {
 }
 
 /**
+ * 判断字符串是否为 JSON 数组
+ * @param {string} str - 字符串
+ * @returns {boolean}
+ */
+function isJsonArray(str) {
+  if (!str || typeof str !== 'string') return false;
+  try {
+    var parsed = JSON.parse(str);
+    return Array.isArray(parsed);
+  } catch (_unused) {
+    return false;
+  }
+}
+
+/**
  * 对比单个资源字段
- * @param {string} oldVal - 旧值（资源地址）
- * @param {string} newVal - 新值（资源地址）
+ * @param {string|Object} oldVal - 旧值（资源地址或对象）
+ * @param {string|Object} newVal - 新值（资源地址或对象）
  * @param {string} fieldName - 字段名称
  * @param {string} resourceType - 资源类型: 'file' | 'image' | 'video'
  * @returns {Object} { html, useShadowDOM, markers, hasDiff }
  */
 function diffResourceField(oldVal, newVal, fieldName, resourceType) {
-  var oldUrl = String(oldVal || '');
-  var newUrl = String(newVal || '');
+  // 支持字符串和对象格式
+  var oldUrl = extractUrl$1(oldVal);
+  var newUrl = extractUrl$1(newVal);
 
   // 快速判断
   if (oldUrl === newUrl) {
     return {
-      html: newUrl,
+      html: newUrl ? generateResourceHtml$1(newVal, resourceType) : '',
       useShadowDOM: false,
       markers: [],
       hasDiff: false,
@@ -3329,7 +3348,7 @@ function diffResourceField(oldVal, newVal, fieldName, resourceType) {
     };
   }
   var result = {
-    html: newUrl,
+    html: '',
     useShadowDOM: false,
     markers: [],
     hasDiff: true,
@@ -3343,14 +3362,14 @@ function diffResourceField(oldVal, newVal, fieldName, resourceType) {
       url: newUrl,
       diffType: 'add'
     };
-    result.html = wrapWithDiffTag(newUrl, 'add', fieldName);
+    result.html = generateDiffTag$1(newVal, 'add', fieldName, resourceType);
   } else if (oldUrl && !newUrl) {
     // 删除资源
     result.oldResource = {
       url: oldUrl,
       diffType: 'del'
     };
-    result.html = wrapWithDiffTag(oldUrl, 'del', fieldName);
+    result.html = generateDiffTag$1(oldVal, 'del', fieldName, resourceType);
   } else {
     // 资源变更
     result.oldResource = {
@@ -3361,9 +3380,7 @@ function diffResourceField(oldVal, newVal, fieldName, resourceType) {
       url: newUrl,
       diffType: 'add'
     };
-    var diffResult = diffText(oldUrl, newUrl, fieldName);
-    result.html = diffResult.html;
-    result.markers = diffResult.markers;
+    result.html = generateDiffTag$1(oldVal, 'del', fieldName, resourceType) + generateDiffTag$1(newVal, 'add', fieldName, resourceType);
   }
   return result;
 }
@@ -3380,21 +3397,31 @@ function diffResourcesField(oldVal, newVal, fieldName, resourceType) {
   var oldArr = normalizeArray$1(oldVal);
   var newArr = normalizeArray$1(newVal);
 
+  // 提取 URL 用于对比
+  var oldUrls = oldArr.map(function (v) {
+    return extractUrl$1(v);
+  });
+  var newUrls = newArr.map(function (v) {
+    return extractUrl$1(v);
+  });
+
   // 快速判断
-  if (arraysEqual(oldArr, newArr)) {
+  if (arraysEqual(oldUrls, newUrls)) {
     return {
-      html: newArr,
+      html: newArr.map(function (v) {
+        return generateResourceHtml$1(v, resourceType);
+      }).join(''),
       useShadowDOM: false,
       markers: [],
       hasDiff: false,
       resourceType: resourceType,
-      oldResources: oldArr.map(function (url) {
+      oldResources: oldUrls.map(function (url) {
         return {
           url: url,
           diffType: 'same'
         };
       }),
-      newResources: newArr.map(function (url) {
+      newResources: newUrls.map(function (url) {
         return {
           url: url,
           diffType: 'same'
@@ -3416,7 +3443,7 @@ function normalizeArray$1(val) {
     try {
       var parsed = JSON.parse(val);
       return Array.isArray(parsed) ? parsed : [];
-    } catch (_unused) {
+    } catch (_unused2) {
       // 如果不是 JSON，尝试按逗号分割
       return val.split(',').map(function (s) {
         return s.trim();
@@ -3452,12 +3479,20 @@ function diffResourceArrays(oldArr, newArr, fieldName, resourceType) {
   var result = [];
   var markers = [];
 
+  // 提取 URL 用于对比
+  var oldUrls = oldArr.map(function (v) {
+    return extractUrl$1(v);
+  });
+  var newUrls = newArr.map(function (v) {
+    return extractUrl$1(v);
+  });
+
   // 建立索引映射
-  var oldSet = new Set(oldArr);
-  var newSet = new Set(newArr);
+  var oldSet = new Set(oldUrls);
+  var newSet = new Set(newUrls);
 
   // 处理旧资源
-  var oldResources = oldArr.map(function (url) {
+  var oldResources = oldUrls.map(function (url) {
     var exists = newSet.has(url);
     return {
       url: url,
@@ -3466,7 +3501,7 @@ function diffResourceArrays(oldArr, newArr, fieldName, resourceType) {
   });
 
   // 处理新资源
-  var newResources = newArr.map(function (url) {
+  var newResources = newUrls.map(function (url) {
     var exists = oldSet.has(url);
     return {
       url: url,
@@ -3474,42 +3509,28 @@ function diffResourceArrays(oldArr, newArr, fieldName, resourceType) {
     };
   });
 
-  // 生成差异结果
-  var allUrls = new Set([].concat(oldArr, newArr));
+  // 合并所有项（用于生成 HTML）
+  var allItems = [].concat(oldArr, newArr);
+  var seenUrls = new Set();
   var hasDiff = false;
-  allUrls.forEach(function (url) {
+  allItems.forEach(function (item) {
+    var url = extractUrl$1(item);
+    if (!url || seenUrls.has(url)) return;
+    seenUrls.add(url);
     var inOld = oldSet.has(url);
     var inNew = newSet.has(url);
-    var item = {
-      url: url,
-      diffType: 'same',
-      diffHtml: ''
-    };
     if (!inOld && inNew) {
-      item.diffType = 'add';
-      item.diffHtml = wrapWithDiffTag(url, 'add', fieldName);
+      result.push(generateDiffTag$1(item, 'add', fieldName, resourceType));
       hasDiff = true;
     } else if (inOld && !inNew) {
-      item.diffType = 'del';
-      item.diffHtml = wrapWithDiffTag(url, 'del', fieldName);
+      result.push(generateDiffTag$1(item, 'del', fieldName, resourceType));
       hasDiff = true;
     } else {
-      item.diffHtml = url;
+      result.push(generateResourceHtml$1(item, resourceType));
     }
-    result.push(item);
-  });
-
-  // 按 diffType 排序：del > add > same
-  var typeOrder = {
-    del: 0,
-    add: 1,
-    same: 2
-  };
-  result.sort(function (a, b) {
-    return typeOrder[a.diffType] - typeOrder[b.diffType];
   });
   return {
-    html: result,
+    html: result.join(''),
     useShadowDOM: false,
     markers: markers,
     hasDiff: hasDiff,
@@ -3546,7 +3567,7 @@ function normalizeDynamicArray(val) {
     try {
       var parsed = JSON.parse(val);
       return Array.isArray(parsed) ? parsed : [];
-    } catch (_unused2) {
+    } catch (_unused3) {
       return [];
     }
   }
@@ -3653,6 +3674,121 @@ function wrapWithDiffTag(content, type, fieldName) {
   var color = type === 'add' ? '#1878E8' : 'red';
   var diffId = fieldName + "_" + type + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
   return "<" + tag + " style=\"color: " + color + ";\" data-diff=\"" + type + "\" data-diff-id=\"" + diffId + "\" data-diff-field=\"" + fieldName + "\">" + content + "</" + tag + ">";
+}
+
+/**
+ * 从值中提取 URL
+ * 支持字符串和对象格式
+ * @param {string|Object} value - 值
+ * @returns {string} URL
+ */
+function extractUrl$1(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value.url) return value.url;
+  return '';
+}
+
+/**
+ * 从值中提取标签
+ * @param {string|Object} value - 值
+ * @returns {string} 标签
+ */
+function extractLabel$1(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return getFileName$1(value);
+  if (typeof value === 'object') {
+    if (value.label) return value.label;
+    if (value.url) return getFileName$1(value.url);
+  }
+  return '';
+}
+
+/**
+ * 从值中提取 target
+ * @param {string|Object} value - 值
+ * @returns {string} target ('_blank' | '_self' | '_preview' | '_inline')
+ */
+function extractTarget$1(value) {
+  if (!value || typeof value !== 'object') return '_blank';
+  return value.target || '_blank';
+}
+
+/**
+ * 生成资源 HTML
+ * @param {string|Object} value - 值（字符串或对象）
+ * @param {string} type - 资源类型
+ * @returns {string}
+ */
+function generateResourceHtml$1(value, type) {
+  if (!value) return '';
+  var url = extractUrl$1(value);
+  var label = extractLabel$1(value);
+  var target = extractTarget$1(value);
+  if (!url) return '';
+  switch (type) {
+    case 'image':
+    case 'images':
+      return "<span class=\"resource-preview resource-image\" data-type=\"image\" data-url=\"" + escapeAttr$2(url) + "\" title=\"\u70B9\u51FB\u9884\u89C8\">\n        <img src=\"" + escapeAttr$2(url) + "\" alt=\"" + escapeAttr$2(label) + "\" />\n      </span>";
+    case 'video':
+    case 'videos':
+      return "<span class=\"resource-preview resource-video\" data-type=\"video\" data-url=\"" + escapeAttr$2(url) + "\" title=\"\u70B9\u51FB\u64AD\u653E\">\n        <span class=\"resource-icon\">\uD83C\uDFAC</span>\n        <span class=\"resource-name\">" + escapeHtml$2(label) + "</span>\n      </span>";
+    case 'file':
+    case 'files':
+      {
+        var linkTarget = target === '_self' ? '' : "target=\"" + target + "\"";
+        return "<span class=\"resource-preview resource-file\" data-type=\"file\" data-url=\"" + escapeAttr$2(url) + "\" data-target=\"" + escapeAttr$2(target) + "\">\n        <span class=\"resource-icon\">\uD83D\uDCCE</span>\n        <a href=\"" + escapeAttr$2(url) + "\" " + linkTarget + " class=\"resource-link\">" + escapeHtml$2(label) + "</a>\n      </span>";
+      }
+    default:
+      return escapeHtml$2(url);
+  }
+}
+
+/**
+ * 生成带差异标记的资源 HTML
+ * @param {string|Object} value - 值（字符串或对象）
+ * @param {string} diffType - 差异类型 ('add' | 'del')
+ * @param {string} fieldName - 字段名
+ * @param {string} type - 资源类型
+ * @returns {string}
+ */
+function generateDiffTag$1(value, diffType, fieldName, type) {
+  var tag = diffType === 'add' ? 'ins' : 'del';
+  var color = diffType === 'add' ? '#1878E8' : '#D32F2F';
+  var diffId = fieldName + "_" + diffType + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+  var content = generateResourceHtml$1(value, type);
+  return "<" + tag + " style=\"color: " + color + ";\" data-diff=\"" + diffType + "\" data-diff-id=\"" + diffId + "\" data-diff-field=\"" + fieldName + "\">" + content + "</" + tag + ">";
+}
+
+/**
+ * 获取文件名
+ * @param {string} url - URL
+ * @returns {string} 文件名
+ */
+function getFileName$1(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    var pathname = new URL(url).pathname;
+    return pathname.split('/').pop() || url;
+  } catch (_unused4) {
+    return url.split('/').pop() || url;
+  }
+}
+
+/**
+ * HTML 转义
+ */
+function escapeHtml$2(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * 属性转义
+ */
+function escapeAttr$2(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**
@@ -4003,7 +4139,11 @@ function isValidCustomFieldArray(arr) {
   if (!Array.isArray(arr)) return false;
   if (arr.length === 0) return true;
   return arr.every(function (item) {
-    return item && typeof item === 'object' && typeof item.label === 'string' && item.label.trim() !== '' && 'value' in item;
+    return item && typeof item === 'object' &&
+    // label 必须存在且为字符串（允许空字符串）
+    'label' in item && typeof item.label === 'string' &&
+    // value 必须存在
+    'value' in item;
   });
 }
 
@@ -4024,36 +4164,55 @@ function normalizeArray(val) {
 }
 
 /**
+ * 获取字段项的唯一标识
+ * 优先使用 label，label 为空时使用 field
+ * @param {Object} item - 字段项
+ * @returns {string} 唯一标识
+ */
+function getItemKey(item) {
+  var _item$label;
+  if (!item) return '';
+  // 优先使用 label，label 为空时使用 field
+  var label = ((_item$label = item.label) == null ? void 0 : _item$label.trim()) || '';
+  if (label) return label;
+  return item.field || '';
+}
+
+/**
  * 对比自定义字段项
  */
 function diffCustomFieldItems(oldArr, newArr, parentFieldName) {
   var items = [];
   var markers = [];
 
-  // 按 label 建立索引
+  // 按唯一标识建立索引
   var oldMap = new Map(oldArr.filter(function (item) {
-    return item && item.label;
+    return item && (item.label !== undefined || item.field);
   }).map(function (item) {
-    return [item.label, item];
+    return [getItemKey(item), item];
   }));
   var newMap = new Map(newArr.filter(function (item) {
-    return item && item.label;
+    return item && (item.label !== undefined || item.field);
   }).map(function (item) {
-    return [item.label, item];
+    return [getItemKey(item), item];
   }));
 
-  // 获取所有 label
-  var oldLabels = Array.from(oldMap.keys());
-  var newLabels = Array.from(newMap.keys());
-  var allLabels = new Set([].concat(oldLabels, newLabels));
+  // 获取所有标识
+  var oldKeys = Array.from(oldMap.keys());
+  var newKeys = Array.from(newMap.keys());
+  var allKeys = new Set([].concat(oldKeys, newKeys));
   var hasDiff = oldMap.size !== newMap.size;
-  allLabels.forEach(function (label) {
-    var oldItem = oldMap.get(label);
-    var newItem = newMap.get(label);
-    var itemFieldName = parentFieldName + "_" + label;
+  allKeys.forEach(function (key) {
+    var _newItem$label, _oldItem$label;
+    var oldItem = oldMap.get(key);
+    var newItem = newMap.get(key);
+
+    // 显示标签：优先使用 label，否则使用 field
+    var displayLabel = (newItem == null || (_newItem$label = newItem.label) == null ? void 0 : _newItem$label.trim()) || (oldItem == null || (_oldItem$label = oldItem.label) == null ? void 0 : _oldItem$label.trim()) || key;
+    var itemFieldName = parentFieldName + "_" + key;
     var type = (newItem == null ? void 0 : newItem.type) || (oldItem == null ? void 0 : oldItem.type) || 'text';
     var processedItem = {
-      label: label,
+      label: displayLabel,
       type: type,
       field: (newItem == null ? void 0 : newItem.field) || (oldItem == null ? void 0 : oldItem.field) || '',
       fieldName: itemFieldName,
@@ -4108,7 +4267,8 @@ function compareValues(oldVal, newVal, type, fieldName) {
 
   // 如果都是单值
   if (oldValues.length === 1 && newValues.length === 1) {
-    if (oldValues[0] === newValues[0]) {
+    // 使用 isValueEqual 判断值是否相等（支持对象格式）
+    if (isValueEqual(oldValues[0], newValues[0])) {
       return {
         hasDiff: false,
         diffHtml: generateResourceHtml(newValues[0], type),
@@ -4150,24 +4310,86 @@ function compareValues(oldVal, newVal, type, fieldName) {
 
 /**
  * 转换为数组
+ * 支持：字符串、对象、数组
  */
 function toArray(val) {
   if (!val) return [];
-  return Array.isArray(val) ? val : [val];
+  if (Array.isArray(val)) return val;
+  return [val];
+}
+
+/**
+ * 从值中提取 URL
+ * 支持字符串和对象格式
+ * @param {string|Object} value - 值
+ * @returns {string} URL
+ */
+function extractUrl(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value.url) return value.url;
+  return '';
+}
+
+/**
+ * 从值中提取标签
+ * @param {string|Object} value - 值
+ * @returns {string} 标签
+ */
+function extractLabel(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return getFileName(value);
+  if (typeof value === 'object') {
+    // 优先使用 label，其次用 url 提取文件名
+    if (value.label) return value.label;
+    if (value.url) return getFileName(value.url);
+  }
+  return '';
+}
+
+/**
+ * 从值中提取 target
+ * @param {string|Object} value - 值
+ * @returns {string} target ('_blank' | '_self' | '_preview' | '_inline')
+ */
+function extractTarget(value) {
+  if (!value || typeof value !== 'object') return '_blank';
+  return value.target || '_blank';
+}
+
+/**
+ * 判断两个值是否相等
+ * 支持字符串和对象格式
+ */
+function isValueEqual(val1, val2) {
+  var url1 = extractUrl(val1);
+  var url2 = extractUrl(val2);
+  return url1 === url2;
 }
 
 /**
  * 对比数组
+ * 支持字符串和对象格式的值
  */
 function compareArrays(oldArr, newArr, type, fieldName) {
   // 确保参数是数组
   oldArr = Array.isArray(oldArr) ? oldArr : [];
   newArr = Array.isArray(newArr) ? newArr : [];
-  var oldSet = new Set(oldArr);
-  var newSet = new Set(newArr);
-  if (oldSet.size === newSet.size) {
-    var allSame = Array.from(oldSet).every(function (v) {
-      return newSet.has(v);
+
+  // 提取 URL 用于对比
+  var oldUrls = oldArr.map(function (v) {
+    return extractUrl(v);
+  });
+  var newUrls = newArr.map(function (v) {
+    return extractUrl(v);
+  });
+  var oldUrlSet = new Set(oldUrls);
+  var newUrlSet = new Set(newUrls);
+
+  // 检查是否完全相同
+  if (oldUrlSet.size === newUrlSet.size) {
+    var allSame = oldUrls.every(function (url) {
+      return newUrlSet.has(url);
     });
     if (allSame) {
       return {
@@ -4180,20 +4402,22 @@ function compareArrays(oldArr, newArr, type, fieldName) {
     }
   }
 
-  // 有差异
+  // 有差异，按 URL 合并所有项
+  var allItems = [].concat(oldArr, newArr);
+  var seenUrls = new Set();
   var result = [];
-  var allUrls = Array.from(new Set(oldArr.concat(newArr)));
-  allUrls.forEach(function (url) {
-    // 确保 url 是字符串
-    if (typeof url !== 'string') return;
-    var inOld = oldSet.has(url);
-    var inNew = newSet.has(url);
+  allItems.forEach(function (item) {
+    var url = extractUrl(item);
+    if (!url || seenUrls.has(url)) return;
+    seenUrls.add(url);
+    var inOld = oldUrlSet.has(url);
+    var inNew = newUrlSet.has(url);
     if (!inOld && inNew) {
-      result.push(generateDiffTag(url, 'add', fieldName, type));
+      result.push(generateDiffTag(item, 'add', fieldName, type));
     } else if (inOld && !inNew) {
-      result.push(generateDiffTag(url, 'del', fieldName, type));
+      result.push(generateDiffTag(item, 'del', fieldName, type));
     } else {
-      result.push(generateResourceHtml(url, type));
+      result.push(generateResourceHtml(item, type));
     }
   });
   return {
@@ -4205,6 +4429,7 @@ function compareArrays(oldArr, newArr, type, fieldName) {
 
 /**
  * 生成值的 HTML（带差异标记）
+ * 支持字符串和对象格式
  */
 function generateValueHtml(value, type, fieldName, diffType) {
   var values = toArray(value);
@@ -4215,17 +4440,27 @@ function generateValueHtml(value, type, fieldName, diffType) {
 
 /**
  * 生成资源 HTML
+ * 支持字符串和对象格式的值
  */
-function generateResourceHtml(url, type) {
-  // 确保 url 是字符串
-  if (!url || typeof url !== 'string') return '';
+function generateResourceHtml(value, type) {
+  if (!value) return '';
+
+  // 提取 URL、标签、target
+  var url = extractUrl(value);
+  var label = extractLabel(value);
+  var target = extractTarget(value);
+  if (!url) return '';
   switch (type) {
     case 'image':
-      return "<span class=\"resource-preview resource-image\" data-type=\"image\" data-url=\"" + escapeAttr$1(url) + "\" title=\"\u70B9\u51FB\u9884\u89C8\">\n        <img src=\"" + escapeAttr$1(url) + "\" alt=\"\u56FE\u7247\" />\n      </span>";
+      return "<span class=\"resource-preview resource-image\" data-type=\"image\" data-url=\"" + escapeAttr$1(url) + "\" title=\"\u70B9\u51FB\u9884\u89C8\">\n        <img src=\"" + escapeAttr$1(url) + "\" alt=\"" + escapeAttr$1(label) + "\" />\n      </span>";
     case 'video':
-      return "<span class=\"resource-preview resource-video\" data-type=\"video\" data-url=\"" + escapeAttr$1(url) + "\" title=\"\u70B9\u51FB\u64AD\u653E\">\n        <span class=\"resource-icon\">\uD83C\uDFAC</span>\n        <span class=\"resource-name\">" + getFileName(url) + "</span>\n      </span>";
+      return "<span class=\"resource-preview resource-video\" data-type=\"video\" data-url=\"" + escapeAttr$1(url) + "\" title=\"\u70B9\u51FB\u64AD\u653E\">\n        <span class=\"resource-icon\">\uD83C\uDFAC</span>\n        <span class=\"resource-name\">" + escapeHtml$1(label) + "</span>\n      </span>";
     case 'file':
-      return "<a class=\"resource-preview resource-file\" href=\"" + escapeAttr$1(url) + "\" download=\"" + getFileName(url) + "\" target=\"_blank\">\n        <span class=\"resource-icon\">\uD83D\uDCCE</span>\n        <span class=\"resource-name\">" + getFileName(url) + "</span>\n      </a>";
+      {
+        // target 支持：_blank（新页签）、_self（当前页）、_preview（预览弹窗）、_inline（内联显示）
+        var linkTarget = target === '_self' ? '' : "target=\"" + target + "\"";
+        return "<span class=\"resource-preview resource-file\" data-type=\"file\" data-url=\"" + escapeAttr$1(url) + "\" data-target=\"" + escapeAttr$1(target) + "\">\n        <span class=\"resource-icon\">\uD83D\uDCCE</span>\n        <a href=\"" + escapeAttr$1(url) + "\" " + linkTarget + " class=\"resource-link\">" + escapeHtml$1(label) + "</a>\n      </span>";
+      }
     default:
       return escapeHtml$1(url);
   }
@@ -4233,17 +4468,25 @@ function generateResourceHtml(url, type) {
 
 /**
  * 生成带差异标记的资源 HTML
+ * @param {string|Object} value - 值（字符串或对象）
+ * @param {string} diffType - 差异类型 ('add' | 'del')
+ * @param {string} fieldName - 字段名
+ * @param {string} type - 资源类型
  */
-function generateDiffTag(url, diffType, fieldName, type) {
+function generateDiffTag(value, diffType, fieldName, type) {
   var tag = diffType === 'add' ? 'ins' : 'del';
   var color = diffType === 'add' ? '#1878E8' : '#D32F2F';
   var diffId = fieldName + "_" + diffType + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-  var content = generateResourceHtml(url, type);
+  var content = generateResourceHtml(value, type);
   return "<" + tag + " style=\"color: " + color + ";\" data-diff=\"" + diffType + "\" data-diff-id=\"" + diffId + "\" data-diff-field=\"" + fieldName + "\">" + content + "</" + tag + ">";
 }
 
 /**
  * 生成资源对比 HTML
+ * @param {string|Object} oldVal - 旧值
+ * @param {string|Object} newVal - 新值
+ * @param {string} type - 资源类型
+ * @param {string} fieldName - 字段名
  */
 function generateResourceDiffHtml(oldVal, newVal, type, fieldName) {
   var oldHtml = oldVal ? generateDiffTag(oldVal, 'del', fieldName, type) : '';
@@ -4253,8 +4496,10 @@ function generateResourceDiffHtml(oldVal, newVal, type, fieldName) {
 
 /**
  * 获取文件名
+ * 支持字符串和对象格式
  */
-function getFileName(url) {
+function getFileName(value) {
+  var url = extractUrl(value);
   if (!url || typeof url !== 'string') return '';
   try {
     var pathname = new URL(url).pathname;
@@ -9417,6 +9662,9 @@ var defaultRenderer = {
 
       // 使用修改后的 HTML（带有 marker-id）
       var markedHtml = markers.html || result.html;
+
+      // 优先使用 result.hasDiff，否则使用 hasDifference 判断
+      var fieldHasDiff = result.hasDiff !== undefined ? result.hasDiff : hasDifference(result.html, oldValue, newValue);
       fieldResults.push({
         field: field,
         label: label,
@@ -9424,7 +9672,7 @@ var defaultRenderer = {
           html: markedHtml
         }),
         markers: markers,
-        hasDiff: hasDifference(result.html, oldValue, newValue)
+        hasDiff: fieldHasDiff
       });
       allMarkers.push.apply(allMarkers, markers);
     });
