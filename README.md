@@ -10,6 +10,7 @@
 - **LeaderLine 连线**：内置连线功能，支持标记与内容的关联展示
 - **自定义渲染器**：可替换默认渲染模板
 - **多字段对比**：支持表单布局的多字段对比展示
+- **自定义字段对比**：支持动态字段数组的对比，包括文本、图片、视频、文件等类型
 
 ## 安装
 
@@ -194,6 +195,62 @@ const rawData = render({
 - **标记合并**：相邻的 add/del 标记自动合并为 modify 类型
 - **精准定位**：LeaderLine 连线指向具体的 `<ins>`/`<del>` 节点，而非字段容器
 - **交互反馈**：悬停标记时自动高亮对应字段并显示连线
+
+### 自定义字段对比
+
+支持动态字段数组的对比，适用于内容管理系统、表单系统等场景：
+
+```javascript
+import { render } from 'gpower-rich-diff'
+
+const fields = [
+  { field: 'title', type: 'text', label: '标题' },
+  { field: 'customFieldMap', type: 'dynamic', label: '自定义字段' }
+]
+
+const oldData = {
+  title: '标题',
+  customFieldMap: [
+    { type: 'text', label: '摘要', value: '<p>旧摘要</p>' },
+    { type: 'image', label: '封面图', value: 'https://example.com/old.jpg' },
+    { type: 'file', label: '附件', value: ['file1.rar', 'file2.pdf'] }
+  ]
+}
+
+const newData = {
+  title: '新标题',
+  customFieldMap: [
+    { type: 'text', label: '摘要', value: '<p>新摘要</p>' },
+    { type: 'image', label: '封面图', value: 'https://example.com/new.jpg' },
+    { type: 'file', label: '附件', value: ['file3.png', 'file2.pdf'] }
+  ]
+}
+
+render({
+  container: document.getElementById('diffContainer'),
+  oldData,
+  newData,
+  fields
+})
+```
+
+**支持的字段类型**：
+
+| 类型 | 说明 | 渲染效果 |
+|------|------|---------|
+| `text` | 文本内容 | 使用 diffText/diffHTML 对比 |
+| `image` | 图片 URL | 缩略图，点击预览大图 |
+| `video` | 视频 URL | 文件名 + 图标，点击播放 |
+| `file` | 文件 URL | 文件名 + 下载链接 |
+
+**特性**：
+
+- 按 `label` 字段匹配新旧数据项
+- 数组值自动逐项对比，标记新增和删除
+- 图片/视频支持点击预览
+- 文件支持点击下载
+
+详细文档请参考 [自定义字段对比功能](docs/自定义字段对比功能.md)
 
 ### 提取变更标记
 

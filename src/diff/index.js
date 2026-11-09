@@ -4,6 +4,7 @@
 import { diffField, diffPriority, diffFixedFields, diffDynamicField } from './field.js'
 import { diffMediaList, diffDocFile, parseDocFile, extractMediaChanges } from './media.js'
 import { diffCustomFields, diffCustomField } from './custom.js'
+import { diffCustomFields as diffCustomFieldItems } from './customFields.js'
 import { diffHTML } from '../adapters/index.js'
 
 export {
@@ -16,7 +17,8 @@ export {
   parseDocFile,
   extractMediaChanges,
   diffCustomFields,
-  diffCustomField
+  diffCustomField,
+  diffCustomFieldItems
 }
 
 /**

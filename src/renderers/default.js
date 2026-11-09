@@ -3,13 +3,18 @@
  * 支持多字段对比和表单布局展示
  */
 import { diffHTML, diffText } from '../adapters/index.js'
+import { diffField } from '../diff/field.js'
 import { generateMarkers } from '../markers/index.js'
 import { createConnector, clearConnectors } from '../leader-line/index.js'
 import { createPopup } from '../popup/index.js'
 import { extractStyleMarkers } from '../markers/styleExtractor.js'
+import { diffCustomFields } from '../diff/customFields.js'
+import { getResourcePreview } from '../popup/resourcePreview.js'
 
 // 弹窗实例
 let popupInstance = null
+// 资源预览实例
+let resourcePreviewInstance = null
 // marker 数据存储
 let markerStore = new Map()
 
@@ -267,6 +272,7 @@ const DEFAULT_STYLES = `
     text-decoration: none;
     padding: 1px 3px;
     border-radius: 2px;
+    display: inline-block;
   }
   .rich-diff-field-content del[data-diff],
   .rich-diff-field-content .diff-del,
@@ -276,6 +282,7 @@ const DEFAULT_STYLES = `
     text-decoration: line-through;
     padding: 1px 3px;
     border-radius: 2px;
+    display: inline-block;
   }
 
   .rich-diff-empty {
@@ -287,6 +294,63 @@ const DEFAULT_STYLES = `
   .rich-diff-no-change {
     color: #999;
     font-style: italic;
+  }
+
+  /* 资源预览样式 */
+  .resource-preview {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 2px 0;
+    transition: background 0.2s;
+  }
+
+  .resource-preview:hover {
+    background: #e9ecef;
+  }
+
+  .resource-preview.resource-image {
+    padding: 2px;
+  }
+
+  .resource-preview.resource-image img {
+    max-width: 100px;
+    max-height: 60px;
+    border-radius: 3px;
+    object-fit: cover;
+  }
+
+  .resource-preview.resource-file {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .resource-preview.resource-file:hover {
+    background: #e8f4ff;
+  }
+
+  .resource-icon {
+    font-size: 16px;
+  }
+
+  .resource-name {
+    font-size: 12px;
+    color: inherit;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 左侧 marker 区域图片自适应 */
+  .rich-diff-markers-panel img {
+    max-width: 100%;
+    height: auto;
+    display: block;
   }
 
   /* LeaderLine 连线样式 */
@@ -323,7 +387,7 @@ export const defaultRenderer = {
     const {
       oldData,       // 旧数据对象 { title, content, subtitle }
       newData,       // 新数据对象
-      fields         // 字段配置 [{ label, field, sort }]
+      fields         // 字段配置 [{ label, field, sort, type }]
     } = options
 
     if (!container) {
@@ -365,17 +429,57 @@ export const defaultRenderer = {
     const { detectStyle = false, styleDiffConfig = {} } = config
 
     sortedFields.forEach((fieldConfig, index) => {
-      const { field, label } = fieldConfig
+      const { field, label, type, mayContainHtml } = fieldConfig
       const oldValue = oldData[field] || ''
       const newValue = newData[field] || ''
 
-      // 判断是否为 HTML 内容（简单判断）
-      const isHtml = isHtmlContent(oldValue) || isHtmlContent(newValue)
+      // dynamic 类型特殊处理
+      if (type === 'dynamic') {
+        // 校验数据格式
+        if (!Array.isArray(oldValue) && !Array.isArray(newValue)) {
+          return // 跳过非数组类型
+        }
+
+        // 对比自定义字段
+        const customResult = diffCustomFields(oldValue || [], newValue || [], field)
+
+        // 将每个项作为独立字段处理
+        customResult.items.forEach((item, itemIndex) => {
+          const itemField = item.fieldName
+          const itemLabel = `${label} - ${item.label}`
+
+          // 生成标记，并获取带有 marker-id 的 HTML
+          const markers = createFieldMarkers(item.diffHtml, itemField, itemLabel, fieldResults.length + itemIndex)
+          const markedHtml = markers.html || item.diffHtml
+
+          fieldResults.push({
+            field: itemField,
+            label: itemLabel,
+            result: { html: markedHtml, hasDiff: item.hasDiff },
+            markers,
+            hasDiff: item.hasDiff,
+            isCustomField: true,
+            customType: item.type,
+            customData: item
+          })
+
+          allMarkers.push(...markers)
+        })
+        return
+      }
 
       // 执行对比
-      const result = isHtml
-        ? diffHTML(String(oldValue), String(newValue), field)
-        : diffText(String(oldValue), String(newValue), field)
+      let result
+      if (type) {
+        // 指定了字段类型，使用 diffField
+        result = diffField(oldValue, newValue, field, { type, mayContainHtml })
+      } else {
+        // 未指定类型，自动判断
+        const isHtml = isHtmlContent(oldValue) || isHtmlContent(newValue)
+        result = isHtml
+          ? diffHTML(String(oldValue), String(newValue), field)
+          : diffText(String(oldValue), String(newValue), field)
+      }
 
       // 直接生成标记（不依赖预定义字段），并获取带 ID 的 HTML
       const markers = createFieldMarkers(result.html, field, label, index)
@@ -899,6 +1003,30 @@ function bindInteractions(elements, markers, config = {}) {
     }
   }, true)
 
+  // 资源预览点击事件
+  elements.formEl?.addEventListener('click', (e) => {
+    const previewEl = e.target.closest('.resource-preview[data-type]')
+    if (!previewEl) return
+
+    const type = previewEl.dataset.type
+    const url = previewEl.dataset.url
+
+    if (!url || type === 'file') return // file 类型由 a 标签处理
+
+    // 获取预览实例
+    if (!resourcePreviewInstance) {
+      resourcePreviewInstance = getResourcePreview()
+    }
+
+    // 收集同一字段内的所有同类型资源
+    const fieldEl = previewEl.closest('.rich-diff-field')
+    const allResources = fieldEl?.querySelectorAll(`.resource-preview[data-type="${type}"]`) || []
+    const urls = [...allResources].map(el => el.dataset.url)
+    const currentIndex = urls.indexOf(url)
+
+    resourcePreviewInstance.show(urls, type, currentIndex)
+  })
+
   return state
 }
 
@@ -1078,6 +1206,12 @@ function destroyRenderer(state, container) {
   if (popupInstance) {
     popupInstance.destroy()
     popupInstance = null
+  }
+
+  // 销毁资源预览
+  if (resourcePreviewInstance) {
+    resourcePreviewInstance.destroy()
+    resourcePreviewInstance = null
   }
 
   // 清理 marker 存储

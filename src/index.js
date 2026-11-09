@@ -36,6 +36,7 @@ import {
   extractMediaChanges,
   diffCustomFields,
   diffCustomField,
+  diffCustomFieldItems,
   computeArticleDiff
 } from './diff/index.js'
 
@@ -116,6 +117,7 @@ export {
   extractMediaChanges,
   diffCustomFields,
   diffCustomField,
+  diffCustomFieldItems,
   computeArticleDiff,
   // 展示层
   generateMarkers,

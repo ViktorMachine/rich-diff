@@ -3377,8 +3377,8 @@ function diffResourceField(oldVal, newVal, fieldName, resourceType) {
  * @returns {Object} { html, useShadowDOM, markers, hasDiff }
  */
 function diffResourcesField(oldVal, newVal, fieldName, resourceType) {
-  var oldArr = normalizeArray(oldVal);
-  var newArr = normalizeArray(newVal);
+  var oldArr = normalizeArray$1(oldVal);
+  var newArr = normalizeArray$1(newVal);
 
   // 快速判断
   if (arraysEqual(oldArr, newArr)) {
@@ -3410,7 +3410,7 @@ function diffResourcesField(oldVal, newVal, fieldName, resourceType) {
  * @param {Array|string} val - 输入值
  * @returns {Array} 标准化后的数组
  */
-function normalizeArray(val) {
+function normalizeArray$1(val) {
   if (!val) return [];
   if (typeof val === 'string') {
     try {
@@ -3876,7 +3876,7 @@ function extractMediaChanges$1(newItem, oldItem) {
  * @param {Object} options - 配置选项
  * @returns {Object} 带差异标记的字段对象
  */
-function diffCustomFields(oldFields, newFields, options) {
+function diffCustomFields$1(oldFields, newFields, options) {
   if (oldFields === void 0) {
     oldFields = {};
   }
@@ -3966,6 +3966,321 @@ function diffFileField(oldFile, newFile) {
 }
 
 /**
+ * 自定义字段对比工具
+ */
+
+/**
+ * 对比自定义字段数组
+ * @param {Array} oldVal - 旧值数组，格式: [{ field, type, label, value }]
+ * @param {Array} newVal - 新值数组，格式: [{ field, type, label, value }]
+ * @param {string} fieldName - 字段名称
+ * @returns {Object} { items, markers, hasDiff }
+ */
+function diffCustomFields(oldVal, newVal, fieldName) {
+  var oldArr = normalizeArray(oldVal);
+  var newArr = normalizeArray(newVal);
+
+  // 校验数据格式
+  if (!isValidCustomFieldArray(oldArr) || !isValidCustomFieldArray(newArr)) {
+    console.warn('[rich-diff] 自定义字段数据格式不正确，跳过对比');
+    return {
+      items: [],
+      markers: [],
+      hasDiff: false
+    };
+  }
+
+  // 按 label 匹配对比
+  return diffCustomFieldItems(oldArr, newArr, fieldName);
+}
+
+/**
+ * 校验自定义字段数组格式
+ * @param {Array} arr - 数组
+ * @returns {boolean}
+ */
+function isValidCustomFieldArray(arr) {
+  if (!Array.isArray(arr)) return false;
+  if (arr.length === 0) return true;
+  return arr.every(function (item) {
+    return item && typeof item === 'object' && typeof item.label === 'string' && item.label.trim() !== '' && 'value' in item;
+  });
+}
+
+/**
+ * 标准化数组
+ */
+function normalizeArray(val) {
+  if (!val) return [];
+  if (typeof val === 'string') {
+    try {
+      var parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_unused) {
+      return [];
+    }
+  }
+  return Array.isArray(val) ? val : [];
+}
+
+/**
+ * 对比自定义字段项
+ */
+function diffCustomFieldItems(oldArr, newArr, parentFieldName) {
+  var items = [];
+  var markers = [];
+
+  // 按 label 建立索引
+  var oldMap = new Map(oldArr.filter(function (item) {
+    return item && item.label;
+  }).map(function (item) {
+    return [item.label, item];
+  }));
+  var newMap = new Map(newArr.filter(function (item) {
+    return item && item.label;
+  }).map(function (item) {
+    return [item.label, item];
+  }));
+
+  // 获取所有 label
+  var oldLabels = Array.from(oldMap.keys());
+  var newLabels = Array.from(newMap.keys());
+  var allLabels = new Set([].concat(oldLabels, newLabels));
+  var hasDiff = oldMap.size !== newMap.size;
+  allLabels.forEach(function (label) {
+    var oldItem = oldMap.get(label);
+    var newItem = newMap.get(label);
+    var itemFieldName = parentFieldName + "_" + label;
+    var type = (newItem == null ? void 0 : newItem.type) || (oldItem == null ? void 0 : oldItem.type) || 'text';
+    var processedItem = {
+      label: label,
+      type: type,
+      field: (newItem == null ? void 0 : newItem.field) || (oldItem == null ? void 0 : oldItem.field) || '',
+      fieldName: itemFieldName,
+      diffType: 'same',
+      oldValue: null,
+      newValue: null,
+      diffHtml: '',
+      hasDiff: false
+    };
+    if (!oldItem && newItem) {
+      // 新增项
+      processedItem.diffType = 'add';
+      processedItem.newValue = newItem.value;
+      processedItem.hasDiff = true;
+      processedItem.diffHtml = generateValueHtml(newItem.value, type, itemFieldName, 'add');
+      hasDiff = true;
+    } else if (oldItem && !newItem) {
+      // 删除项
+      processedItem.diffType = 'del';
+      processedItem.oldValue = oldItem.value;
+      processedItem.hasDiff = true;
+      processedItem.diffHtml = generateValueHtml(oldItem.value, type, itemFieldName, 'del');
+      hasDiff = true;
+    } else if (oldItem && newItem) {
+      // 对比值
+      processedItem.oldValue = oldItem.value;
+      processedItem.newValue = newItem.value;
+      var valueDiff = compareValues(oldItem.value, newItem.value, type, itemFieldName);
+      processedItem.hasDiff = valueDiff.hasDiff;
+      processedItem.diffHtml = valueDiff.diffHtml;
+      if (valueDiff.hasDiff) {
+        processedItem.diffType = 'change';
+        markers.push.apply(markers, valueDiff.markers);
+        hasDiff = true;
+      }
+    }
+    items.push(processedItem);
+  });
+  return {
+    items: items,
+    markers: markers,
+    hasDiff: hasDiff
+  };
+}
+
+/**
+ * 对比值
+ */
+function compareValues(oldVal, newVal, type, fieldName) {
+  var oldValues = toArray(oldVal);
+  var newValues = toArray(newVal);
+
+  // 如果都是单值
+  if (oldValues.length === 1 && newValues.length === 1) {
+    if (oldValues[0] === newValues[0]) {
+      return {
+        hasDiff: false,
+        diffHtml: generateResourceHtml(newValues[0], type),
+        markers: []
+      };
+    }
+
+    // 文本类型使用 diffText
+    if (type === 'text') {
+      // 检查是否包含 HTML
+      var isHtml = String(oldVal).includes('<') || String(newVal).includes('<');
+      if (isHtml) {
+        var _result = diffHTML(String(oldVal || ''), String(newVal || ''), fieldName);
+        return {
+          hasDiff: true,
+          diffHtml: _result.html,
+          markers: _result.markers || []
+        };
+      }
+      var result = diffText(String(oldVal || ''), String(newVal || ''), fieldName);
+      return {
+        hasDiff: true,
+        diffHtml: result.html,
+        markers: result.markers || []
+      };
+    }
+
+    // 资源类型
+    return {
+      hasDiff: true,
+      diffHtml: generateResourceDiffHtml(oldValues[0], newValues[0], type, fieldName),
+      markers: []
+    };
+  }
+
+  // 数组对比
+  return compareArrays(oldValues, newValues, type, fieldName);
+}
+
+/**
+ * 转换为数组
+ */
+function toArray(val) {
+  if (!val) return [];
+  return Array.isArray(val) ? val : [val];
+}
+
+/**
+ * 对比数组
+ */
+function compareArrays(oldArr, newArr, type, fieldName) {
+  // 确保参数是数组
+  oldArr = Array.isArray(oldArr) ? oldArr : [];
+  newArr = Array.isArray(newArr) ? newArr : [];
+  var oldSet = new Set(oldArr);
+  var newSet = new Set(newArr);
+  if (oldSet.size === newSet.size) {
+    var allSame = Array.from(oldSet).every(function (v) {
+      return newSet.has(v);
+    });
+    if (allSame) {
+      return {
+        hasDiff: false,
+        diffHtml: newArr.map(function (v) {
+          return generateResourceHtml(v, type);
+        }).join(''),
+        markers: []
+      };
+    }
+  }
+
+  // 有差异
+  var result = [];
+  var allUrls = Array.from(new Set(oldArr.concat(newArr)));
+  allUrls.forEach(function (url) {
+    // 确保 url 是字符串
+    if (typeof url !== 'string') return;
+    var inOld = oldSet.has(url);
+    var inNew = newSet.has(url);
+    if (!inOld && inNew) {
+      result.push(generateDiffTag(url, 'add', fieldName, type));
+    } else if (inOld && !inNew) {
+      result.push(generateDiffTag(url, 'del', fieldName, type));
+    } else {
+      result.push(generateResourceHtml(url, type));
+    }
+  });
+  return {
+    hasDiff: true,
+    diffHtml: result.join(''),
+    markers: []
+  };
+}
+
+/**
+ * 生成值的 HTML（带差异标记）
+ */
+function generateValueHtml(value, type, fieldName, diffType) {
+  var values = toArray(value);
+  return values.map(function (v) {
+    return generateDiffTag(v, diffType, fieldName, type);
+  }).join('');
+}
+
+/**
+ * 生成资源 HTML
+ */
+function generateResourceHtml(url, type) {
+  // 确保 url 是字符串
+  if (!url || typeof url !== 'string') return '';
+  switch (type) {
+    case 'image':
+      return "<span class=\"resource-preview resource-image\" data-type=\"image\" data-url=\"" + escapeAttr$1(url) + "\" title=\"\u70B9\u51FB\u9884\u89C8\">\n        <img src=\"" + escapeAttr$1(url) + "\" alt=\"\u56FE\u7247\" />\n      </span>";
+    case 'video':
+      return "<span class=\"resource-preview resource-video\" data-type=\"video\" data-url=\"" + escapeAttr$1(url) + "\" title=\"\u70B9\u51FB\u64AD\u653E\">\n        <span class=\"resource-icon\">\uD83C\uDFAC</span>\n        <span class=\"resource-name\">" + getFileName(url) + "</span>\n      </span>";
+    case 'file':
+      return "<a class=\"resource-preview resource-file\" href=\"" + escapeAttr$1(url) + "\" download=\"" + getFileName(url) + "\" target=\"_blank\">\n        <span class=\"resource-icon\">\uD83D\uDCCE</span>\n        <span class=\"resource-name\">" + getFileName(url) + "</span>\n      </a>";
+    default:
+      return escapeHtml$1(url);
+  }
+}
+
+/**
+ * 生成带差异标记的资源 HTML
+ */
+function generateDiffTag(url, diffType, fieldName, type) {
+  var tag = diffType === 'add' ? 'ins' : 'del';
+  var color = diffType === 'add' ? '#1878E8' : '#D32F2F';
+  var diffId = fieldName + "_" + diffType + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+  var content = generateResourceHtml(url, type);
+  return "<" + tag + " style=\"color: " + color + ";\" data-diff=\"" + diffType + "\" data-diff-id=\"" + diffId + "\" data-diff-field=\"" + fieldName + "\">" + content + "</" + tag + ">";
+}
+
+/**
+ * 生成资源对比 HTML
+ */
+function generateResourceDiffHtml(oldVal, newVal, type, fieldName) {
+  var oldHtml = oldVal ? generateDiffTag(oldVal, 'del', fieldName, type) : '';
+  var newHtml = newVal ? generateDiffTag(newVal, 'add', fieldName, type) : '';
+  return oldHtml + newHtml;
+}
+
+/**
+ * 获取文件名
+ */
+function getFileName(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    var pathname = new URL(url).pathname;
+    return pathname.split('/').pop() || url;
+  } catch (_unused2) {
+    return url.split('/').pop() || url;
+  }
+}
+
+/**
+ * HTML 转义
+ */
+function escapeHtml$1(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * 属性转义
+ */
+function escapeAttr$1(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
  * 计算文章所有字段的差异
  * @param {Object} current - 当前版本数据
  * @param {Object} last - 历史版本数据
@@ -4046,7 +4361,7 @@ function computeArticleDiff(current, last, options) {
 
   // 3. 自定义字段对比
   if (current.customFieldMap && last.customFieldMap) {
-    var customResult = diffCustomFields(last.customFieldMap, current.customFieldMap);
+    var customResult = diffCustomFields$1(last.customFieldMap, current.customFieldMap);
     diffed.customFieldMap = customResult;
     hasDiff = true;
   }
@@ -8781,13 +9096,187 @@ function injectStyles$1() {
   stylesInjected = true;
 }
 
+/**
+ * 资源预览弹窗
+ */
+
+// 弹窗实例
+var previewInstance = null;
+
+// 样式
+var PREVIEW_STYLES = "\n  .resource-preview-popup {\n    position: fixed;\n    top: 0;\n    left: 0;\n    right: 0;\n    bottom: 0;\n    background: rgba(0, 0, 0, 0.8);\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    z-index: 99999;\n    opacity: 0;\n    visibility: hidden;\n    transition: opacity 0.2s, visibility 0.2s;\n  }\n\n  .resource-preview-popup.active {\n    opacity: 1;\n    visibility: visible;\n  }\n\n  .resource-preview-content {\n    position: relative;\n    max-width: 90vw;\n    max-height: 90vh;\n    background: #fff;\n    border-radius: 8px;\n    overflow: hidden;\n    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);\n  }\n\n  .resource-preview-close {\n    position: absolute;\n    top: 10px;\n    right: 10px;\n    width: 36px;\n    height: 36px;\n    border: none;\n    background: rgba(0, 0, 0, 0.5);\n    color: white;\n    border-radius: 50%;\n    cursor: pointer;\n    font-size: 20px;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    z-index: 1;\n    transition: background 0.2s;\n  }\n\n  .resource-preview-close:hover {\n    background: rgba(0, 0, 0, 0.7);\n  }\n\n  .resource-preview-image {\n    max-width: 90vw;\n    max-height: 90vh;\n    display: block;\n  }\n\n  .resource-preview-video {\n    max-width: 90vw;\n    max-height: 80vh;\n    display: block;\n  }\n\n  .resource-preview-nav {\n    position: absolute;\n    top: 50%;\n    transform: translateY(-50%);\n    width: 48px;\n    height: 48px;\n    border: none;\n    background: rgba(0, 0, 0, 0.5);\n    color: white;\n    border-radius: 50%;\n    cursor: pointer;\n    font-size: 24px;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    transition: background 0.2s;\n  }\n\n  .resource-preview-nav:hover {\n    background: rgba(0, 0, 0, 0.7);\n  }\n\n  .resource-preview-nav.prev {\n    left: 20px;\n  }\n\n  .resource-preview-nav.next {\n    right: 20px;\n  }\n\n  .resource-preview-counter {\n    position: absolute;\n    bottom: 20px;\n    left: 50%;\n    transform: translateX(-50%);\n    background: rgba(0, 0, 0, 0.6);\n    color: white;\n    padding: 6px 16px;\n    border-radius: 20px;\n    font-size: 14px;\n  }\n";
+
+/**
+ * 创建预览弹窗实例
+ */
+function createResourcePreview() {
+  if (previewInstance) {
+    return previewInstance;
+  }
+
+  // 注入样式
+  var styleId = 'resource-preview-styles';
+  if (!document.getElementById(styleId)) {
+    var style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = PREVIEW_STYLES;
+    document.head.appendChild(style);
+  }
+
+  // 创建弹窗 DOM
+  var popup = document.createElement('div');
+  popup.className = 'resource-preview-popup';
+  popup.innerHTML = "\n    <div class=\"resource-preview-content\">\n      <button class=\"resource-preview-close\" title=\"\u5173\u95ED\">\xD7</button>\n      <button class=\"resource-preview-nav prev\" style=\"display: none;\">\u2039</button>\n      <button class=\"resource-preview-nav next\" style=\"display: none;\">\u203A</button>\n      <div class=\"resource-preview-body\"></div>\n      <div class=\"resource-preview-counter\" style=\"display: none;\"></div>\n    </div>\n  ";
+  document.body.appendChild(popup);
+
+  // 状态
+  var currentUrls = [];
+  var currentIndex = 0;
+  var currentType = 'image';
+
+  // 获取元素
+  var closeBtn = popup.querySelector('.resource-preview-close');
+  var prevBtn = popup.querySelector('.resource-preview-nav.prev');
+  var nextBtn = popup.querySelector('.resource-preview-nav.next');
+  var body = popup.querySelector('.resource-preview-body');
+  var counter = popup.querySelector('.resource-preview-counter');
+
+  // 关闭弹窗
+  var close = function close() {
+    popup.classList.remove('active');
+    // 停止视频播放
+    var video = body.querySelector('video');
+    if (video) {
+      video.pause();
+    }
+  };
+
+  // 显示指定索引的资源
+  var showResource = function showResource(index) {
+    if (index < 0 || index >= currentUrls.length) return;
+    currentIndex = index;
+    var url = currentUrls[index];
+    if (currentType === 'image') {
+      body.innerHTML = "<img class=\"resource-preview-image\" src=\"" + escapeAttr(url) + "\" alt=\"\u9884\u89C8\u56FE\u7247\" />";
+    } else if (currentType === 'video') {
+      body.innerHTML = "<video class=\"resource-preview-video\" src=\"" + escapeAttr(url) + "\" controls autoplay></video>";
+    }
+
+    // 更新计数器
+    if (currentUrls.length > 1) {
+      counter.textContent = index + 1 + " / " + currentUrls.length;
+      counter.style.display = 'block';
+    } else {
+      counter.style.display = 'none';
+    }
+
+    // 更新导航按钮
+    prevBtn.style.display = currentUrls.length > 1 ? 'flex' : 'none';
+    nextBtn.style.display = currentUrls.length > 1 ? 'flex' : 'none';
+    prevBtn.disabled = index === 0;
+    nextBtn.disabled = index === currentUrls.length - 1;
+  };
+
+  // 事件绑定
+  closeBtn.addEventListener('click', close);
+  prevBtn.addEventListener('click', function () {
+    return showResource(currentIndex - 1);
+  });
+  nextBtn.addEventListener('click', function () {
+    return showResource(currentIndex + 1);
+  });
+
+  // 点击背景关闭
+  popup.addEventListener('click', function (e) {
+    if (e.target === popup) {
+      close();
+    }
+  });
+
+  // 键盘控制
+  var handleKeydown = function handleKeydown(e) {
+    if (!popup.classList.contains('active')) return;
+    switch (e.key) {
+      case 'Escape':
+        close();
+        break;
+      case 'ArrowLeft':
+        showResource(currentIndex - 1);
+        break;
+      case 'ArrowRight':
+        showResource(currentIndex + 1);
+        break;
+    }
+  };
+  document.addEventListener('keydown', handleKeydown);
+
+  // 实例方法
+  var instance = {
+    /**
+     * 显示预览
+     * @param {string|string[]} urls - 资源 URL 或 URL 数组
+     * @param {string} type - 资源类型: 'image' | 'video'
+     * @param {number} startIndex - 初始显示索引
+     */
+    show: function show(urls, type, startIndex) {
+      if (type === void 0) {
+        type = 'image';
+      }
+      if (startIndex === void 0) {
+        startIndex = 0;
+      }
+      currentType = type;
+      currentUrls = Array.isArray(urls) ? urls : [urls];
+      currentIndex = Math.max(0, Math.min(startIndex, currentUrls.length - 1));
+      showResource(currentIndex);
+      popup.classList.add('active');
+    },
+    /**
+     * 关闭预览
+     */
+    hide: function hide() {
+      close();
+    },
+    /**
+     * 销毁实例
+     */
+    destroy: function destroy() {
+      document.removeEventListener('keydown', handleKeydown);
+      popup.remove();
+      previewInstance = null;
+    }
+  };
+  previewInstance = instance;
+  return instance;
+}
+
+/**
+ * 获取预览实例
+ */
+function getResourcePreview() {
+  if (!previewInstance) {
+    return createResourcePreview();
+  }
+  return previewInstance;
+}
+
+/**
+ * 属性转义
+ */
+function escapeAttr(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // 弹窗实例
 var popupInstance = null;
+// 资源预览实例
+var resourcePreviewInstance = null;
 // marker 数据存储
 var markerStore = new Map();
 
 // 默认样式
-var DEFAULT_STYLES = "\n  .rich-diff-container {\n    display: flex;\n    height: 600px;\n    max-height: 80vh;\n    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n    font-size: 14px;\n    line-height: 1.6;\n    color: #333;\n    background: #f5f7fa;\n  }\n\n  /* \u5DE6\u4FA7\u53D8\u66F4\u6807\u8BB0\u9762\u677F */\n  .rich-diff-markers-panel {\n    width: 320px;\n    min-width: 280px;\n    max-width: 400px;\n    height: 100%;\n    background: #fff;\n    border-right: 1px solid #e9ecef;\n    overflow-y: auto;\n    overflow-x: hidden;\n    padding: 0 16px;\n    box-sizing: border-box;\n    flex-shrink: 0;\n  }\n\n  .rich-diff-markers-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n    position: sticky;\n    top: 0;\n    background: #fff;\n    z-index: 1;\n  }\n\n  .rich-diff-stats {\n    display: flex;\n    gap: 12px;\n    padding: 8px 12px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    margin-bottom: 12px;\n  }\n\n  .rich-diff-stat {\n    display: flex;\n    align-items: center;\n    gap: 4px;\n    font-size: 12px;\n  }\n\n  .rich-diff-stat-dot {\n    width: 8px;\n    height: 8px;\n    border-radius: 50%;\n  }\n\n  .rich-diff-stat-dot.add { background: #1878E8; }\n  .rich-diff-stat-dot.del { background: #D32F2F; }\n  .rich-diff-stat-dot.modify { background: #E65100; }\n\n  .rich-diff-marker-item {\n    padding: 10px 12px;\n    margin-bottom: 6px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    cursor: pointer;\n    transition: all 0.2s;\n    border-left: 3px solid transparent;\n  }\n\n  .rich-diff-marker-item:hover {\n    background: #e9ecef;\n    transform: translateX(2px);\n  }\n\n  .rich-diff-marker-item.active {\n    background: #e8f4ff;\n    border-left-color: #1878E8;\n  }\n\n  .rich-diff-marker-item.add { border-left-color: #1878E8; }\n  .rich-diff-marker-item.del { border-left-color: #D32F2F; }\n  .rich-diff-marker-item.modify { border-left-color: #E65100; }\n\n  .rich-diff-marker-header {\n    display: flex;\n    align-items: center;\n    gap: 6px;\n    margin-bottom: 4px;\n  }\n\n  .rich-diff-marker-type {\n    display: inline-block;\n    padding: 1px 6px;\n    border-radius: 3px;\n    font-size: 11px;\n    font-weight: 600;\n  }\n\n  .rich-diff-marker-type.add { background: #E8F4FF; color: #1878E8; }\n  .rich-diff-marker-type.del { background: #FFEBEE; color: #D32F2F; }\n  .rich-diff-marker-type.modify { background: #FFF3E0; color: #E65100; }\n\n  .rich-diff-marker-field {\n    font-weight: 600;\n    font-size: 12px;\n  }\n\n  .rich-diff-marker-content {\n    font-size: 11px;\n    color: #666;\n    margin-top: 4px;\n    word-break: break-all;\n  }\n\n  .rich-diff-marker-content .old { color: #D32F2F; }\n  .rich-diff-marker-content .new { color: #1878E8; }\n\n  .rich-diff-marker-content .marker-prefix {\n    font-weight: bold;\n    font-family: monospace;\n  }\n\n  /* \u5DE6\u4FA7 marker \u533A\u57DF\u56FE\u7247\u81EA\u9002\u5E94 */\n  .rich-diff-markers-panel img {\n    max-width: 120px;\n    height: auto;\n    display: block;\n  }\n\n  /* \u53F3\u4FA7\u5185\u5BB9\u9762\u677F */\n  .rich-diff-content-panel {\n    flex: 1;\n    height: 100%;\n    background: #fff;\n    overflow-y: auto;\n    overflow-x: hidden;\n    padding: 0 20px;\n    box-sizing: border-box;\n  }\n\n  .rich-diff-content-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n    position: sticky;\n    top: 0;\n    background: #fff;\n    z-index: 1;\n  }\n\n  /* \u8868\u5355\u5E03\u5C40 */\n  .rich-diff-form {\n    max-width: 800px;\n  }\n\n  /* \u9632\u6B62\u5185\u5BB9\u6EA2\u51FA */\n  .rich-diff-form *,\n  .rich-diff-form *::before,\n  .rich-diff-form *::after {\n    max-width: 100%;\n    box-sizing: border-box;\n  }\n\n  /* \u56FE\u7247/\u89C6\u9891\u81EA\u9002\u5E94 */\n  .rich-diff-form img,\n  .rich-diff-form video,\n  .rich-diff-form audio,\n  .rich-diff-form iframe,\n  .rich-diff-form embed,\n  .rich-diff-form object {\n    max-width: 100%;\n    height: auto;\n    display: block;\n  }\n\n  /* \u957F\u6587\u672C/URL \u81EA\u52A8\u6362\u884C */\n  .rich-diff-form pre,\n  .rich-diff-form code,\n  .rich-diff-form a {\n    word-break: break-word;\n    overflow-wrap: break-word;\n  }\n\n  /* \u8868\u683C\u6EA2\u51FA\u5904\u7406 */\n  .rich-diff-form table {\n    width: 100%;\n    table-layout: fixed;\n    overflow-x: auto;\n    display: block;\n  }\n\n  /* \u4EE3\u7801\u5757\u6A2A\u5411\u6EDA\u52A8 */\n  .rich-diff-form pre {\n    overflow-x: auto;\n    white-space: pre-wrap;\n    word-wrap: break-word;\n  }\n\n  .rich-diff-field {\n    display: flex;\n    margin-bottom: 16px;\n    padding: 12px;\n    background: #fafafa;\n    border-radius: 6px;\n    border: 1px solid #eee;\n    transition: all 0.2s;\n  }\n\n  .rich-diff-field:hover {\n    background: #f5f5f5;\n  }\n\n  .rich-diff-field.highlight {\n    background: #e8f4ff;\n    border-color: #1878E8;\n    box-shadow: 0 0 0 2px rgba(24, 120, 232, 0.2);\n  }\n\n  .rich-diff-field-label {\n    width: 100px;\n    min-width: 100px;\n    font-weight: 600;\n    color: #555;\n    padding-right: 12px;\n    border-right: 1px solid #ddd;\n    display: flex;\n    align-items: flex-start;\n  }\n\n  .rich-diff-field-content {\n    flex: 1;\n    padding-left: 12px;\n    line-height: 1.8;\n    word-break: break-word;\n  }\n\n  /* \u5DEE\u5F02\u6837\u5F0F */\n  .rich-diff-field-content ins[data-diff],\n  .rich-diff-field-content .diff-add,\n  .rich-diff-field-content difftext[data-diff=\"add\"] {\n    color: #1878E8;\n    background: #E8F4FF;\n    text-decoration: none;\n    padding: 1px 3px;\n    border-radius: 2px;\n  }\n  .rich-diff-field-content del[data-diff],\n  .rich-diff-field-content .diff-del,\n  .rich-diff-field-content difftext[data-diff=\"del\"] {\n    color: #D32F2F;\n    background: #FFEBEE;\n    text-decoration: line-through;\n    padding: 1px 3px;\n    border-radius: 2px;\n  }\n\n  .rich-diff-empty {\n    text-align: center;\n    color: #999;\n    padding: 40px 20px;\n  }\n\n  .rich-diff-no-change {\n    color: #999;\n    font-style: italic;\n  }\n\n  /* LeaderLine \u8FDE\u7EBF\u6837\u5F0F */\n  svg.leader-line {\n    z-index: 99999 !important;\n    pointer-events: none !important;\n  }\n";
+var DEFAULT_STYLES = "\n  .rich-diff-container {\n    display: flex;\n    height: 600px;\n    max-height: 80vh;\n    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n    font-size: 14px;\n    line-height: 1.6;\n    color: #333;\n    background: #f5f7fa;\n  }\n\n  /* \u5DE6\u4FA7\u53D8\u66F4\u6807\u8BB0\u9762\u677F */\n  .rich-diff-markers-panel {\n    width: 320px;\n    min-width: 280px;\n    max-width: 400px;\n    height: 100%;\n    background: #fff;\n    border-right: 1px solid #e9ecef;\n    overflow-y: auto;\n    overflow-x: hidden;\n    padding: 0 16px;\n    box-sizing: border-box;\n    flex-shrink: 0;\n  }\n\n  .rich-diff-markers-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n    position: sticky;\n    top: 0;\n    background: #fff;\n    z-index: 1;\n  }\n\n  .rich-diff-stats {\n    display: flex;\n    gap: 12px;\n    padding: 8px 12px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    margin-bottom: 12px;\n  }\n\n  .rich-diff-stat {\n    display: flex;\n    align-items: center;\n    gap: 4px;\n    font-size: 12px;\n  }\n\n  .rich-diff-stat-dot {\n    width: 8px;\n    height: 8px;\n    border-radius: 50%;\n  }\n\n  .rich-diff-stat-dot.add { background: #1878E8; }\n  .rich-diff-stat-dot.del { background: #D32F2F; }\n  .rich-diff-stat-dot.modify { background: #E65100; }\n\n  .rich-diff-marker-item {\n    padding: 10px 12px;\n    margin-bottom: 6px;\n    background: #f8f9fa;\n    border-radius: 6px;\n    cursor: pointer;\n    transition: all 0.2s;\n    border-left: 3px solid transparent;\n  }\n\n  .rich-diff-marker-item:hover {\n    background: #e9ecef;\n    transform: translateX(2px);\n  }\n\n  .rich-diff-marker-item.active {\n    background: #e8f4ff;\n    border-left-color: #1878E8;\n  }\n\n  .rich-diff-marker-item.add { border-left-color: #1878E8; }\n  .rich-diff-marker-item.del { border-left-color: #D32F2F; }\n  .rich-diff-marker-item.modify { border-left-color: #E65100; }\n\n  .rich-diff-marker-header {\n    display: flex;\n    align-items: center;\n    gap: 6px;\n    margin-bottom: 4px;\n  }\n\n  .rich-diff-marker-type {\n    display: inline-block;\n    padding: 1px 6px;\n    border-radius: 3px;\n    font-size: 11px;\n    font-weight: 600;\n  }\n\n  .rich-diff-marker-type.add { background: #E8F4FF; color: #1878E8; }\n  .rich-diff-marker-type.del { background: #FFEBEE; color: #D32F2F; }\n  .rich-diff-marker-type.modify { background: #FFF3E0; color: #E65100; }\n\n  .rich-diff-marker-field {\n    font-weight: 600;\n    font-size: 12px;\n  }\n\n  .rich-diff-marker-content {\n    font-size: 11px;\n    color: #666;\n    margin-top: 4px;\n    word-break: break-all;\n  }\n\n  .rich-diff-marker-content .old { color: #D32F2F; }\n  .rich-diff-marker-content .new { color: #1878E8; }\n\n  .rich-diff-marker-content .marker-prefix {\n    font-weight: bold;\n    font-family: monospace;\n  }\n\n  /* \u5DE6\u4FA7 marker \u533A\u57DF\u56FE\u7247\u81EA\u9002\u5E94 */\n  .rich-diff-markers-panel img {\n    max-width: 120px;\n    height: auto;\n    display: block;\n  }\n\n  /* \u53F3\u4FA7\u5185\u5BB9\u9762\u677F */\n  .rich-diff-content-panel {\n    flex: 1;\n    height: 100%;\n    background: #fff;\n    overflow-y: auto;\n    overflow-x: hidden;\n    padding: 0 20px;\n    box-sizing: border-box;\n  }\n\n  .rich-diff-content-panel h3 {\n    font-size: 14px;\n    color: #666;\n    margin: 0 0 12px 0;\n    padding-bottom: 8px;\n    border-bottom: 1px solid #eee;\n    position: sticky;\n    top: 0;\n    background: #fff;\n    z-index: 1;\n  }\n\n  /* \u8868\u5355\u5E03\u5C40 */\n  .rich-diff-form {\n    max-width: 800px;\n  }\n\n  /* \u9632\u6B62\u5185\u5BB9\u6EA2\u51FA */\n  .rich-diff-form *,\n  .rich-diff-form *::before,\n  .rich-diff-form *::after {\n    max-width: 100%;\n    box-sizing: border-box;\n  }\n\n  /* \u56FE\u7247/\u89C6\u9891\u81EA\u9002\u5E94 */\n  .rich-diff-form img,\n  .rich-diff-form video,\n  .rich-diff-form audio,\n  .rich-diff-form iframe,\n  .rich-diff-form embed,\n  .rich-diff-form object {\n    max-width: 100%;\n    height: auto;\n    display: block;\n  }\n\n  /* \u957F\u6587\u672C/URL \u81EA\u52A8\u6362\u884C */\n  .rich-diff-form pre,\n  .rich-diff-form code,\n  .rich-diff-form a {\n    word-break: break-word;\n    overflow-wrap: break-word;\n  }\n\n  /* \u8868\u683C\u6EA2\u51FA\u5904\u7406 */\n  .rich-diff-form table {\n    width: 100%;\n    table-layout: fixed;\n    overflow-x: auto;\n    display: block;\n  }\n\n  /* \u4EE3\u7801\u5757\u6A2A\u5411\u6EDA\u52A8 */\n  .rich-diff-form pre {\n    overflow-x: auto;\n    white-space: pre-wrap;\n    word-wrap: break-word;\n  }\n\n  .rich-diff-field {\n    display: flex;\n    margin-bottom: 16px;\n    padding: 12px;\n    background: #fafafa;\n    border-radius: 6px;\n    border: 1px solid #eee;\n    transition: all 0.2s;\n  }\n\n  .rich-diff-field:hover {\n    background: #f5f5f5;\n  }\n\n  .rich-diff-field.highlight {\n    background: #e8f4ff;\n    border-color: #1878E8;\n    box-shadow: 0 0 0 2px rgba(24, 120, 232, 0.2);\n  }\n\n  .rich-diff-field-label {\n    width: 100px;\n    min-width: 100px;\n    font-weight: 600;\n    color: #555;\n    padding-right: 12px;\n    border-right: 1px solid #ddd;\n    display: flex;\n    align-items: flex-start;\n  }\n\n  .rich-diff-field-content {\n    flex: 1;\n    padding-left: 12px;\n    line-height: 1.8;\n    word-break: break-word;\n  }\n\n  /* \u5DEE\u5F02\u6837\u5F0F */\n  .rich-diff-field-content ins[data-diff],\n  .rich-diff-field-content .diff-add,\n  .rich-diff-field-content difftext[data-diff=\"add\"] {\n    color: #1878E8;\n    background: #E8F4FF;\n    text-decoration: none;\n    padding: 1px 3px;\n    border-radius: 2px;\n    display: inline-block;\n  }\n  .rich-diff-field-content del[data-diff],\n  .rich-diff-field-content .diff-del,\n  .rich-diff-field-content difftext[data-diff=\"del\"] {\n    color: #D32F2F;\n    background: #FFEBEE;\n    text-decoration: line-through;\n    padding: 1px 3px;\n    border-radius: 2px;\n    display: inline-block;\n  }\n\n  .rich-diff-empty {\n    text-align: center;\n    color: #999;\n    padding: 40px 20px;\n  }\n\n  .rich-diff-no-change {\n    color: #999;\n    font-style: italic;\n  }\n\n  /* \u8D44\u6E90\u9884\u89C8\u6837\u5F0F */\n  .resource-preview {\n    display: inline-flex;\n    align-items: center;\n    gap: 6px;\n    padding: 4px 8px;\n    background: #f5f5f5;\n    border-radius: 4px;\n    cursor: pointer;\n    margin: 2px 0;\n    transition: background 0.2s;\n  }\n\n  .resource-preview:hover {\n    background: #e9ecef;\n  }\n\n  .resource-preview.resource-image {\n    padding: 2px;\n  }\n\n  .resource-preview.resource-image img {\n    max-width: 100px;\n    max-height: 60px;\n    border-radius: 3px;\n    object-fit: cover;\n  }\n\n  .resource-preview.resource-file {\n    text-decoration: none;\n    color: inherit;\n  }\n\n  .resource-preview.resource-file:hover {\n    background: #e8f4ff;\n  }\n\n  .resource-icon {\n    font-size: 16px;\n  }\n\n  .resource-name {\n    font-size: 12px;\n    color: inherit;\n    max-width: 150px;\n    overflow: hidden;\n    text-overflow: ellipsis;\n    white-space: nowrap;\n  }\n\n  /* \u5DE6\u4FA7 marker \u533A\u57DF\u56FE\u7247\u81EA\u9002\u5E94 */\n  .rich-diff-markers-panel img {\n    max-width: 100%;\n    height: auto;\n    display: block;\n  }\n\n  /* LeaderLine \u8FDE\u7EBF\u6837\u5F0F */\n  svg.leader-line {\n    z-index: 99999 !important;\n    pointer-events: none !important;\n  }\n";
 
 /**
  * 默认渲染器
@@ -8867,15 +9356,61 @@ var defaultRenderer = {
       styleDiffConfig = _config$styleDiffConf === void 0 ? {} : _config$styleDiffConf;
     sortedFields.forEach(function (fieldConfig, index) {
       var field = fieldConfig.field,
-        label = fieldConfig.label;
+        label = fieldConfig.label,
+        type = fieldConfig.type,
+        mayContainHtml = fieldConfig.mayContainHtml;
       var oldValue = oldData[field] || '';
       var newValue = newData[field] || '';
 
-      // 判断是否为 HTML 内容（简单判断）
-      var isHtml = isHtmlContent(oldValue) || isHtmlContent(newValue);
+      // dynamic 类型特殊处理
+      if (type === 'dynamic') {
+        // 校验数据格式
+        if (!Array.isArray(oldValue) && !Array.isArray(newValue)) {
+          return; // 跳过非数组类型
+        }
+
+        // 对比自定义字段
+        var customResult = diffCustomFields(oldValue || [], newValue || [], field);
+
+        // 将每个项作为独立字段处理
+        customResult.items.forEach(function (item, itemIndex) {
+          var itemField = item.fieldName;
+          var itemLabel = label + " - " + item.label;
+
+          // 生成标记，并获取带有 marker-id 的 HTML
+          var markers = createFieldMarkers(item.diffHtml, itemField, itemLabel, fieldResults.length + itemIndex);
+          var markedHtml = markers.html || item.diffHtml;
+          fieldResults.push({
+            field: itemField,
+            label: itemLabel,
+            result: {
+              html: markedHtml,
+              hasDiff: item.hasDiff
+            },
+            markers: markers,
+            hasDiff: item.hasDiff,
+            isCustomField: true,
+            customType: item.type,
+            customData: item
+          });
+          allMarkers.push.apply(allMarkers, markers);
+        });
+        return;
+      }
 
       // 执行对比
-      var result = isHtml ? diffHTML(String(oldValue), String(newValue), field) : diffText(String(oldValue), String(newValue), field);
+      var result;
+      if (type) {
+        // 指定了字段类型，使用 diffField
+        result = diffField(oldValue, newValue, field, {
+          type: type,
+          mayContainHtml: mayContainHtml
+        });
+      } else {
+        // 未指定类型，自动判断
+        var isHtml = isHtmlContent(oldValue) || isHtmlContent(newValue);
+        result = isHtml ? diffHTML(String(oldValue), String(newValue), field) : diffText(String(oldValue), String(newValue), field);
+      }
 
       // 直接生成标记（不依赖预定义字段），并获取带 ID 的 HTML
       var markers = createFieldMarkers(result.html, field, label, index);
@@ -9252,7 +9787,7 @@ function renderUI(container, result, markers, fieldName, config) {
  * 绑定交互事件
  */
 function bindInteractions(elements, markers, config) {
-  var _elements$contentPane;
+  var _elements$contentPane, _elements$formEl3;
   if (config === void 0) {
     config = {};
   }
@@ -9366,6 +9901,29 @@ function bindInteractions(elements, markers, config) {
       popupInstance.hide();
     }
   }, true);
+
+  // 资源预览点击事件
+  (_elements$formEl3 = elements.formEl) == null || _elements$formEl3.addEventListener('click', function (e) {
+    var previewEl = e.target.closest('.resource-preview[data-type]');
+    if (!previewEl) return;
+    var type = previewEl.dataset.type;
+    var url = previewEl.dataset.url;
+    if (!url || type === 'file') return; // file 类型由 a 标签处理
+
+    // 获取预览实例
+    if (!resourcePreviewInstance) {
+      resourcePreviewInstance = getResourcePreview();
+    }
+
+    // 收集同一字段内的所有同类型资源
+    var fieldEl = previewEl.closest('.rich-diff-field');
+    var allResources = (fieldEl == null ? void 0 : fieldEl.querySelectorAll(".resource-preview[data-type=\"" + type + "\"]")) || [];
+    var urls = [].concat(allResources).map(function (el) {
+      return el.dataset.url;
+    });
+    var currentIndex = urls.indexOf(url);
+    resourcePreviewInstance.show(urls, type, currentIndex);
+  });
   return state;
 }
 
@@ -9537,6 +10095,12 @@ function destroyRenderer(state, container) {
     popupInstance = null;
   }
 
+  // 销毁资源预览
+  if (resourcePreviewInstance) {
+    resourcePreviewInstance.destroy();
+    resourcePreviewInstance = null;
+  }
+
   // 清理 marker 存储
   if (container) {
     var markerElements = container.querySelectorAll('[data-style-diff]');
@@ -9706,7 +10270,7 @@ var index$1 = {
   // 工具层
   computeArticleDiff: computeArticleDiff,
   diffMediaList: diffMediaList,
-  diffCustomFields: diffCustomFields,
+  diffCustomFields: diffCustomFields$1,
   // 展示层
   generateMarkers: generateMarkers,
   sortMarkers: sortMarkers,
@@ -9720,5 +10284,5 @@ var index$1 = {
   diffWithEngine: diffWithEngine
 };
 
-export { ChangeTypes, DefaultConfig, ErrorTypes, MediaTypes, cleanContent, clearConnectors, compareStyles, computeArticleDiff, createConnector, createConnectorFromMarker, createConnectors, createPopup, index$1 as default, defaultRenderer, detectChangeType, diffCustomField, diffCustomFields, diffDocFile, diffDynamicField, diffField, diffFixedFields, diffHTML, diffMediaList, diffPriority, diffStyle, diffText, diffWithEngine, extractDiffMarkers, extractMediaChanges$1 as extractMediaChanges, extractStyleElements, findElementById, generateMarkers, getAvailableEngines, getConnectorCount, getDiffRanges, getEngine, getEngineName, getRenderer, hasDiffMarkers, hasEngine, hasStyleDiff, isLeaderLineAvailable, matchElements, parseDocFile, parseStyle, removeConnector, render, resetAllCounters, setEngine, setRenderer, sortMarkers, updateAllConnectors, updateConnector };
+export { ChangeTypes, DefaultConfig, ErrorTypes, MediaTypes, cleanContent, clearConnectors, compareStyles, computeArticleDiff, createConnector, createConnectorFromMarker, createConnectors, createPopup, index$1 as default, defaultRenderer, detectChangeType, diffCustomField, diffCustomFields as diffCustomFieldItems, diffCustomFields$1 as diffCustomFields, diffDocFile, diffDynamicField, diffField, diffFixedFields, diffHTML, diffMediaList, diffPriority, diffStyle, diffText, diffWithEngine, extractDiffMarkers, extractMediaChanges$1 as extractMediaChanges, extractStyleElements, findElementById, generateMarkers, getAvailableEngines, getConnectorCount, getDiffRanges, getEngine, getEngineName, getRenderer, hasDiffMarkers, hasEngine, hasStyleDiff, isLeaderLineAvailable, matchElements, parseDocFile, parseStyle, removeConnector, render, resetAllCounters, setEngine, setRenderer, sortMarkers, updateAllConnectors, updateConnector };
 //# sourceMappingURL=rich-diff.dev.js.map
