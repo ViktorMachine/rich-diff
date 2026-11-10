@@ -9948,15 +9948,14 @@ function renderFields(formEl, fieldResults, config) {
   fieldResults.forEach(function (_ref2) {
     var field = _ref2.field,
       label = _ref2.label,
-      result = _ref2.result,
-      hasDiff = _ref2.hasDiff;
+      result = _ref2.result;
     var fieldEl = document.createElement('div');
     fieldEl.className = 'rich-diff-field';
     fieldEl.dataset.field = field;
     var contentEl = document.createElement('div');
     contentEl.className = 'rich-diff-field-content';
     contentEl.dataset.field = field;
-    if (hasDiff && result.html) {
+    if (result.html) {
       // 有差异，直接渲染 HTML（浏览器会正确解析）
       contentEl.innerHTML = result.html;
     } else {

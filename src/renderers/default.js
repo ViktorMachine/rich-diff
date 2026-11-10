@@ -782,7 +782,7 @@ function renderFields(formEl, fieldResults, config = {}) {
   const { emptyPlaceholder } = config
   formEl.innerHTML = ''
 
-  fieldResults.forEach(({ field, label, result, hasDiff }) => {
+  fieldResults.forEach(({ field, label, result }) => {
     const fieldEl = document.createElement('div')
     fieldEl.className = 'rich-diff-field'
     fieldEl.dataset.field = field
@@ -791,7 +791,7 @@ function renderFields(formEl, fieldResults, config = {}) {
     contentEl.className = 'rich-diff-field-content'
     contentEl.dataset.field = field
 
-    if (hasDiff && result.html) {
+    if (result.html) {
       // 有差异，直接渲染 HTML（浏览器会正确解析）
       contentEl.innerHTML = result.html
     } else {
