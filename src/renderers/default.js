@@ -394,11 +394,12 @@ export const defaultRenderer = {
       return diffResult || null
     }
 
-    // 合并样式检测配置（优先使用顶层参数）
+    // 合并配置
     const mergedConfig = {
       ...config,
       detectStyle: detectStyle !== undefined ? detectStyle : config.detectStyle,
-      styleDiffConfig: styleDiffConfig || config.styleDiffConfig || {}
+      styleDiffConfig: styleDiffConfig || config.styleDiffConfig || {},
+      emptyPlaceholder: options.emptyPlaceholder !== undefined ? options.emptyPlaceholder : config.emptyPlaceholder
     }
 
     // 判断使用哪种模式
@@ -753,7 +754,7 @@ function renderFormLayout(container, fieldResults, markers, config) {
 
   // 渲染字段
   const formEl = contentPanel.querySelector('.rich-diff-form')
-  renderFields(formEl, fieldResults)
+  renderFields(formEl, fieldResults, config)
 
   // 渲染标记列表
   renderMarkersList(markersPanel.querySelector('.rich-diff-markers-list'), markers)
@@ -772,8 +773,13 @@ function renderFormLayout(container, fieldResults, markers, config) {
 
 /**
  * 渲染字段列表
+ * @param {HTMLElement} formEl - 表单容器
+ * @param {Array} fieldResults - 字段结果
+ * @param {Object} config - 配置选项
+ * @param {string} config.emptyPlaceholder - 空内容占位符，不传则不显示空内容字段
  */
-function renderFields(formEl, fieldResults) {
+function renderFields(formEl, fieldResults, config = {}) {
+  const { emptyPlaceholder } = config
   formEl.innerHTML = ''
 
   fieldResults.forEach(({ field, label, result, hasDiff }) => {
@@ -792,7 +798,7 @@ function renderFields(formEl, fieldResults) {
       // 无差异，显示纯文本
       const plainText = result.html
         ? result.html.replace(/<[^>]*>/g, '')
-        : '无内容'
+        : emptyPlaceholder
       contentEl.innerHTML = `<span class="rich-diff-no-change">${escapeHtml(plainText)}</span>`
     }
 

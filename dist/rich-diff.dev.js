@@ -9559,10 +9559,11 @@ var defaultRenderer = {
       return diffResult || null;
     }
 
-    // 合并样式检测配置（优先使用顶层参数）
+    // 合并配置
     var mergedConfig = _extends({}, config, {
       detectStyle: detectStyle !== undefined ? detectStyle : config.detectStyle,
-      styleDiffConfig: styleDiffConfig || config.styleDiffConfig || {}
+      styleDiffConfig: styleDiffConfig || config.styleDiffConfig || {},
+      emptyPlaceholder: options.emptyPlaceholder !== undefined ? options.emptyPlaceholder : config.emptyPlaceholder
     });
 
     // 判断使用哪种模式
@@ -9701,7 +9702,7 @@ var defaultRenderer = {
     }
 
     // 渲染 UI
-    var elements = renderFormLayout(container, fieldResults, allMarkers);
+    var elements = renderFormLayout(container, fieldResults, allMarkers, config);
 
     // 绑定交互
     var state = bindInteractions(elements, allMarkers, config);
@@ -9914,7 +9915,7 @@ function renderFormLayout(container, fieldResults, markers, config) {
 
   // 渲染字段
   var formEl = contentPanel.querySelector('.rich-diff-form');
-  renderFields(formEl, fieldResults);
+  renderFields(formEl, fieldResults, config);
 
   // 渲染标记列表
   renderMarkersList(markersPanel.querySelector('.rich-diff-markers-list'), markers);
@@ -9932,8 +9933,17 @@ function renderFormLayout(container, fieldResults, markers, config) {
 
 /**
  * 渲染字段列表
+ * @param {HTMLElement} formEl - 表单容器
+ * @param {Array} fieldResults - 字段结果
+ * @param {Object} config - 配置选项
+ * @param {string} config.emptyPlaceholder - 空内容占位符，不传则不显示空内容字段
  */
-function renderFields(formEl, fieldResults) {
+function renderFields(formEl, fieldResults, config) {
+  if (config === void 0) {
+    config = {};
+  }
+  var _config2 = config,
+    emptyPlaceholder = _config2.emptyPlaceholder;
   formEl.innerHTML = '';
   fieldResults.forEach(function (_ref2) {
     var field = _ref2.field,
@@ -9951,7 +9961,7 @@ function renderFields(formEl, fieldResults) {
       contentEl.innerHTML = result.html;
     } else {
       // 无差异，显示纯文本
-      var plainText = result.html ? result.html.replace(/<[^>]*>/g, '') : '无内容';
+      var plainText = result.html ? result.html.replace(/<[^>]*>/g, '') : emptyPlaceholder;
       contentEl.innerHTML = "<span class=\"rich-diff-no-change\">" + escapeHtml(plainText) + "</span>";
     }
 
@@ -10046,9 +10056,9 @@ function bindInteractions(elements, markers, config) {
     scrollTimeout: null,
     isScrolling: false
   };
-  var _config2 = config,
-    _config2$detectStyle = _config2.detectStyle,
-    detectStyle = _config2$detectStyle === void 0 ? false : _config2$detectStyle;
+  var _config3 = config,
+    _config3$detectStyle = _config3.detectStyle,
+    detectStyle = _config3$detectStyle === void 0 ? false : _config3$detectStyle;
 
   // 滚动监听（只监听右侧内容面板）
   var handleContentScroll = function handleContentScroll() {
